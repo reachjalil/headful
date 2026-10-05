@@ -43,7 +43,7 @@ Selected CRM results can be supplied to an external AI provider when you use tha
 
 Client grants restrict orgs and operations and can be revoked. New imports are disabled for agent access until you enable them. Preparing a change never approves it. Consequential writes require the human's exact, expiring, single-use review in the desktop workspace. A changed org, target, revision, input or relevant provider state invalidates that approval. Unknown write outcomes require reconciliation; they are not automatically retried.
 
-When the proprietary MCP Apps Extension is installed and enabled, use **Agent access** for supported local harness setup. A hosted ChatGPT connector cannot reach `127.0.0.1` on your Mac; use a compatible local host, or retain the separately authorized optional cloud offering. Internal T3 chat and provider sessions are experimental opt-in features, separate from Salesforce onboarding.
+When the proprietary MCP Apps Extension is installed and enabled, use **Agent access** for supported local harness setup. Hosted ChatGPT requires an operator-configured private Secure MCP Tunnel or the separate OAuth Cloud offering. [Agent setup](docs/user/headful-harnesses.md) explains local installation, hosted connections and App presentation. Internal T3 chat and provider sessions are experimental opt-in features, separate from Salesforce onboarding.
 
 ## Upstream and licenses
 
