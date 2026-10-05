@@ -202,7 +202,7 @@ export function HeadfulWorkspaceShell({
           <div className="hf-workspace-target">
             <OrgCloud color={org?.color || "#79849b"} />
             <label>
-              Target org
+              <span className="hf-visually-hidden">Target org</span>
               <select
                 aria-label="Target Salesforce org"
                 title={

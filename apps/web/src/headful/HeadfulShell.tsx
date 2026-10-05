@@ -151,12 +151,12 @@ const pages: Array<{ id: Page; title: string; symbol: string }> = [
   { id: "settings", title: "Settings", symbol: "⚙" },
 ];
 const labels: Record<Page, string> = {
-  orgs: "A clear head for every org.",
+  orgs: "Your orgs",
   workspace: "Your Salesforce workspace",
-  integrations: "Bring your preferred agent.",
-  activity: "The work, with a record.",
-  extensions: "A little more Headful.",
-  settings: "Make Headful your own.",
+  integrations: "Agent connections",
+  activity: "Reviewed changes",
+  extensions: "Extensions",
+  settings: "Settings",
   utility: "Your admin workspace",
 };
 
@@ -701,9 +701,7 @@ export function HeadfulShell() {
           <span>
             <img src={helmet} alt="" />
           </span>
-          <div>
-            Headful<small>YOUR ORGS. YOUR MAC.</small>
-          </div>
+          <div>Headful</div>
         </div>
         <nav aria-label="Headful">
           <p className="hf-eyebrow">WORKSPACE</p>
@@ -801,7 +799,7 @@ export function HeadfulShell() {
           <span>
             {page === "workspace" || page === "utility"
               ? "Explicit workspace target"
-              : "Salesforce first. · Default for new work"}
+              : "Default for new work"}
           </span>
           <div>
             {(page === "workspace" || page === "utility" ? workspaceOrg : current) ? (
@@ -860,9 +858,6 @@ export function HeadfulShell() {
           {page !== "workspace" && page !== "utility" && (
             <div className="hf-page-heading">
               <div>
-                <p className="hf-eyebrow">
-                  {page === "orgs" ? "YOUR SALESFORCE CONTROL CENTER" : "HEADFUL"}
-                </p>
                 <h1>{labels[page]}</h1>
               </div>
               {page === "orgs" && (
