@@ -12,7 +12,7 @@ export { orgEnvironment } from "./types";
 function SearchControl(props: UtilityComponentProps) {
   return (
     <button className="hf-button hf-compact" type="button" onClick={props.onCommandPalette}>
-      Search & commands <kbd>⌘K</kbd>
+      Workspace commands <kbd>⌘⇧K</kbd>
     </button>
   );
 }

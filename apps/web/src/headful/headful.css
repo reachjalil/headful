@@ -117,40 +117,6 @@
   flex-direction: column;
   padding: 0 8px 12px;
 }
-/* Match T3's title-bar row and leave its native window controls clear. */
-.hf-brand {
-  display: flex;
-  align-items: center;
-  flex-shrink: 0;
-  gap: 7px;
-  height: var(--workspace-topbar-height, 52px);
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: -0.25px;
-  padding: 0 10px 0 88px;
-  margin: 0 -8px 10px;
-  border-bottom: 1px solid var(--hf-line);
-  -webkit-app-region: drag;
-}
-.hf-brand > span {
-  display: grid;
-  place-items: center;
-  flex-shrink: 0;
-  width: 23px;
-  height: 23px;
-  background: var(--hf-brand);
-  border-radius: 5px;
-}
-.hf-brand img {
-  width: 19px;
-  height: 19px;
-}
-.hf-brand > div {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 .hf-sidebar nav {
   flex: 1;
   min-height: 0;
@@ -992,21 +958,9 @@
     width: 60px;
     padding: 52px 6px 12px;
   }
-  .hf-brand {
-    height: 32px;
-    padding: 0;
-    justify-content: center;
-    margin: 0 0 8px;
-    border-bottom: 0;
-  }
-  .hf-brand > div,
   .hf-sidebar nav > .hf-eyebrow,
   .hf-sidebar-bottom {
     display: none;
-  }
-  .hf-brand > span {
-    width: 23px;
-    height: 23px;
   }
   .hf-nav-button {
     font-size: 0 !important;

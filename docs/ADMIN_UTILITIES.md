@@ -6,9 +6,13 @@
 
 Connect an org or select an existing connection in **Your orgs**. Only imported connections appear in the workspace selector. Each connection displays its verified Salesforce org and principal, environment, alias, status, and cloud color. A sandbox needs its own CLI authorization.
 
-The shared header always shows the target org. Choose another org explicitly or use **Commands & search** (`⌘K`). Switching a workspace target does not change Headful's default org. Existing reviewed workflows and permission proposals remain pinned to their saved org; open a new workspace to use another target.
+The shared header always shows the target org. Choose another org explicitly or use **Workspace commands** (`⌘⇧K`). Switching a workspace target does not change Headful's default org. Existing reviewed workflows and permission proposals remain pinned to their saved org; open a new workspace to use another target.
 
 ## Make the header yours
+
+Use **Search** in the sidebar title bar (`⌘K`) to find app pages, connected orgs, available admin utilities, installed Extensions and saved user workflows. Arrow keys select a result; Enter opens it; Escape closes search and returns focus. Choosing an org opens an explicit workspace without changing the default. Saved workflows and proposals keep their original org.
+
+Open the adjacent notification bell for local CLI/connection issues, enabled Extension outages, review-ready user workflows and recent permission-change outcomes. Opening an item marks it read and navigates to its saved context. **Mark all read**, individual dismissal and **Dismiss read notifications** affect only the inbox. Read/dismissed identifiers stay in local renderer storage; CRM contents and credentials are not copied there. Updates use bounded local reads every 30 seconds while the app is visible, on focus and on manual refresh. A failed refresh keeps the last loaded history and reports the failure.
 
 Open **Customize workspace** to hide or reorder optional controls. Save a global default or an override for the current workspace. **Reset global defaults** restores the contributed defaults; **Use global defaults** removes a workspace override. The target selector cannot be hidden. Preferences remain in the local owner-only store.
 

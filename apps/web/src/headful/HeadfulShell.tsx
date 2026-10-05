@@ -34,6 +34,8 @@ import { reviewCapabilitySchema } from "@t3tools/contracts/headful-workspace/wor
 import { mountWorkspace, type WorkspaceService, type WorkspaceLocation } from "./workspace-view";
 import { HeadfulExtensions } from "./HeadfulExtensions";
 import { HeadfulWorkspaceShell, type WorkspaceCommand } from "./HeadfulWorkspaceShell";
+import { HeadfulCommandCenter, useHeadfulInbox } from "./HeadfulCommandCenter";
+import { buildNotifications, type CommandDestination, type SearchEntry } from "./command-center";
 import {
   headfulExtensionResultSchemas,
   resolveHeadfulContributions,
@@ -142,13 +144,48 @@ type Page =
   | "extensions"
   | "settings"
   | "utility";
-const pages: Array<{ id: Page; title: string; symbol: string }> = [
-  { id: "orgs", title: "Your orgs", symbol: "☁" },
-  { id: "workspace", title: "Salesforce workspace", symbol: "▤" },
-  { id: "integrations", title: "Agent connections", symbol: "◈" },
-  { id: "activity", title: "Reviewed changes", symbol: "✓" },
-  { id: "extensions", title: "Extensions", symbol: "◇" },
-  { id: "settings", title: "Settings", symbol: "⚙" },
+const pages: Array<{
+  id: Exclude<Page, "utility">;
+  title: string;
+  symbol: string;
+  description: string;
+}> = [
+  {
+    id: "orgs",
+    title: "Your orgs",
+    symbol: "☁",
+    description: "Manage local Salesforce connections",
+  },
+  {
+    id: "workspace",
+    title: "Salesforce workspace",
+    symbol: "▤",
+    description: "Browse leads, users and permission sets",
+  },
+  {
+    id: "integrations",
+    title: "Agent connections",
+    symbol: "◈",
+    description: "Connect your favorite agent clients",
+  },
+  {
+    id: "activity",
+    title: "Reviewed changes",
+    symbol: "✓",
+    description: "Continue saved work and inspect receipts",
+  },
+  {
+    id: "extensions",
+    title: "Extensions",
+    symbol: "◇",
+    description: "Manage installed Extensions and their features",
+  },
+  {
+    id: "settings",
+    title: "Settings",
+    symbol: "⚙",
+    description: "Appearance, features and Salesforce CLI setup",
+  },
 ];
 const labels: Record<Page, string> = {
   orgs: "Your orgs",
@@ -368,6 +405,13 @@ export function HeadfulShell() {
     (id: string) => status?.features.find((feature) => feature.id === id)?.enabled ?? false,
     [status],
   );
+  const reviewedEnabled = enabled("reviewed-changes") && enabled("salesforce-workspace");
+  const inbox = useHeadfulInbox({
+    ready: Boolean(status),
+    reviewedEnabled,
+    dispatch,
+    refreshShell: refresh,
+  });
   useEffect(() => {
     void action("Starting local runtime", async () => {
       await refresh();
@@ -415,8 +459,10 @@ export function HeadfulShell() {
       if (action === "open-settings") route("settings");
     });
   }, [route]);
-  const navigate = (next: Page) => {
-    if (next === "workspace" && !workspaceLocation.orgId && status?.defaultOrgId) {
+  const navigate = (next: Page, target?: WorkspaceLocation) => {
+    if (next === "workspace" && target) {
+      onWorkspaceNavigate(target);
+    } else if (next === "workspace" && !workspaceLocation.orgId && status?.defaultOrgId) {
       const orgId = workspaceOrgs["core/workspace"] || status.defaultOrgId;
       setWorkspaceLocation((value) => ({ ...value, orgId }));
       setWorkspaceOrgs((value) => ({ ...value, "core/workspace": orgId }));
@@ -436,9 +482,7 @@ export function HeadfulShell() {
     );
   }, []);
   const openWorkspace = (org: Org, view: WorkspaceLocation["view"] = "home") => {
-    setWorkspaceLocation({ orgId: org.id, view });
-    setWorkspaceOrgs((value) => ({ ...value, "core/workspace": org.id }));
-    navigate("workspace");
+    navigate("workspace", { orgId: org.id, view });
   };
   const current = status?.orgs.find((org) => org.id === status.defaultOrgId);
   const contributions = useMemo(
@@ -568,6 +612,98 @@ export function HeadfulShell() {
       : []),
   ];
   const isDisabled = Boolean(busy);
+  const availablePages = pages
+    .filter((item) => item.id !== "workspace" || enabled("salesforce-workspace"))
+    .filter((item) => item.id !== "integrations" || enabled("external-harness"))
+    .filter((item) => item.id !== "activity" || reviewedEnabled);
+  const searchEntries: SearchEntry[] = [
+    ...availablePages.map<SearchEntry>((item) => ({
+      id: `page/${item.id}`,
+      title: item.title,
+      description: item.description,
+      group: "Pages",
+      destination: { kind: "page", page: item.id },
+    })),
+    ...(status?.orgs ?? []).map<SearchEntry>((org) => ({
+      id: `org/${org.id}`,
+      title: org.label,
+      description: `${orgEnvironment(org)} · ${org.alias || org.username} · ${org.salesforceOrgId}`,
+      group: "Orgs",
+      destination: { kind: "org", orgId: org.id },
+    })),
+    ...contributions.navigation
+      .filter((item) => item.available)
+      .map<SearchEntry>((item) => ({
+        id: `utility/${item.contribution.id}`,
+        title: item.contribution.name,
+        description: item.contribution.description || "Open this admin workspace",
+        group: "Admin utilities",
+        destination: { kind: "utility", componentId: item.contribution.componentId },
+      })),
+    ...extensions.map<SearchEntry>((item) => ({
+      id: `extension/${item.manifest.id}`,
+      title: item.manifest.name,
+      description: `${item.status} · ${item.manifest.description}`,
+      group: "Extensions",
+      destination: { kind: "extension", extensionId: item.manifest.id },
+    })),
+    ...(reviewedEnabled ? inbox.workflows : []).map<SearchEntry>((workflow) => ({
+      id: `workflow/${workflow.id}`,
+      title: workflow.createdUser
+        ? `${workflow.createdUser.FirstName || ""} ${workflow.createdUser.LastName}`.trim()
+        : `Create user${workflow.draft.LastName ? `: ${workflow.draft.LastName}` : ""}`,
+      description: `${workflow.setup.org.label} · ${workflow.status.replaceAll("_", " ")} · ${workflow.id}`,
+      group: "Saved work",
+      destination: {
+        kind: "workspace",
+        location: {
+          view: workflow.createdUser ? "user" : "create-user",
+          orgId: workflow.orgId,
+          workflowId: workflow.id,
+          ...(workflow.recordId ? { recordId: workflow.recordId } : {}),
+        },
+      },
+    })),
+  ];
+  const openSearchDestination = (destination: CommandDestination) => {
+    switch (destination.kind) {
+      case "page":
+        navigate(destination.page);
+        break;
+      case "org": {
+        const org = status?.orgs.find((item) => item.id === destination.orgId);
+        if (!org || !enabled("salesforce-workspace")) navigate("orgs");
+        else openWorkspace(org);
+        break;
+      }
+      case "workspace":
+        if (
+          !reviewedEnabled ||
+          !status?.orgs.some((org) => org.id === destination.location.orgId)
+        ) {
+          navigate(reviewedEnabled ? "activity" : "orgs");
+          break;
+        }
+        navigate("workspace", destination.location);
+        break;
+      case "utility":
+        openUtility(destination.componentId);
+        break;
+      case "extension":
+        setFocusExtensionId(destination.extensionId);
+        navigate("extensions");
+        break;
+    }
+  };
+  const notifications = buildNotifications({
+    orgs: status?.orgs ?? [],
+    cli,
+    extensions,
+    workflows: inbox.workflows,
+    activity: inbox.activity,
+    workspaceEnabled: enabled("salesforce-workspace"),
+    reviewedEnabled,
+  });
   const setFeature = (id: string, value: boolean) =>
     void action("Saving feature", async () => {
       await dispatch("features.set", { id, enabled: value });
@@ -697,29 +833,27 @@ export function HeadfulShell() {
   return (
     <div className="hf-shell" data-theme={dark ? "dark" : "light"}>
       <aside className="hf-sidebar">
-        <div className="hf-brand">
-          <span>
-            <img src={helmet} alt="" />
-          </span>
-          <div>Headful</div>
-        </div>
+        <HeadfulCommandCenter
+          entries={searchEntries}
+          notifications={notifications}
+          loading={inbox.loading}
+          error={inbox.error}
+          onRefresh={() => void inbox.refresh()}
+          onNavigate={openSearchDestination}
+        />
         <nav aria-label="Headful">
           <p className="hf-eyebrow">WORKSPACE</p>
-          {pages
-            .filter((item) => item.id !== "workspace" || enabled("salesforce-workspace"))
-            .filter((item) => item.id !== "integrations" || enabled("external-harness"))
-            .filter((item) => item.id !== "activity" || enabled("reviewed-changes"))
-            .map((item) => (
-              <button
-                className={`hf-nav-button ${page === item.id ? "active" : ""}`}
-                type="button"
-                key={item.id}
-                onClick={() => navigate(item.id)}
-              >
-                <span aria-hidden="true">{item.symbol}</span>
-                {item.title}
-              </button>
-            ))}
+          {availablePages.map((item) => (
+            <button
+              className={`hf-nav-button ${page === item.id ? "active" : ""}`}
+              type="button"
+              key={item.id}
+              onClick={() => navigate(item.id)}
+            >
+              <span aria-hidden="true">{item.symbol}</span>
+              {item.title}
+            </button>
+          ))}
           {contributions.routes
             .filter((item) => item.available)
             .map((item) => (
@@ -1259,13 +1393,7 @@ export function HeadfulShell() {
             <Integrations status={status} busy={isDisabled} action={action} />
           )}
           {page === "activity" && (
-            <Activity
-              status={status}
-              onOpen={(location) => {
-                setWorkspaceLocation(location);
-                navigate("workspace");
-              }}
-            />
+            <Activity status={status} onOpen={(location) => navigate("workspace", location)} />
           )}
           {page === "extensions" && (
             <HeadfulExtensions

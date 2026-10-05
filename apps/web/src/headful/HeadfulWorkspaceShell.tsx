@@ -113,7 +113,14 @@ export function HeadfulWorkspaceShell({
   }, [context.dispatch]);
   useEffect(() => {
     const handle = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+      if (
+        !event.defaultPrevented &&
+        (event.metaKey || event.ctrlKey) &&
+        event.shiftKey &&
+        !event.altKey &&
+        event.key.toLowerCase() === "k" &&
+        !document.querySelector("dialog[open]")
+      ) {
         event.preventDefault();
         openPalette();
       }
@@ -428,7 +435,7 @@ export function HeadfulWorkspaceShell({
         }}
       >
         <div className="hf-card-heading">
-          <h2>Search & commands</h2>
+          <h2>Workspace commands</h2>
           <button
             className="hf-icon-button"
             type="button"
