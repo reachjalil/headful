@@ -25,7 +25,7 @@ export function publicOrg(org: Org) {
     organizationName: org.organization_name,
   };
 }
-export function managedOrg(org: Org, isDefault: boolean) {
+export function managedOrg(org: Org, isDefault: boolean, remoteEnabled = false) {
   return {
     ...publicOrg(org),
     username: org.username,
@@ -33,6 +33,7 @@ export function managedOrg(org: Org, isDefault: boolean) {
     alias: org.alias,
     color: org.color,
     agentEnabled: Boolean(org.agent_enabled),
+    remoteEnabled,
     isDefault,
     connectionVersion: org.connection_version,
   };
@@ -186,10 +187,15 @@ export class OrgManager {
     if (!org) throw new HttpError(404, "org_missing", "This Headful org reference is unavailable.");
     return org;
   }
+  remoteEnabled(id: string) {
+    return this.store.preference<unknown>(`remote:org:${id}:enabled`, false) === true;
+  }
   list() {
     const selected = this.store.preference<string | null>("defaultOrgId", null);
     return {
-      orgs: this.rows().map((org) => managedOrg(org, org.id === selected)),
+      orgs: this.rows().map((org) =>
+        managedOrg(org, org.id === selected, this.remoteEnabled(org.id)),
+      ),
       defaultOrgId: selected,
     };
   }
@@ -284,7 +290,11 @@ export class OrgManager {
       );
     if (!this.store.preference("defaultOrgId", null)) this.store.setPreference("defaultOrgId", id);
     this.store.activity("org_imported", id);
-    return managedOrg(this.get(id), this.store.preference("defaultOrgId", null) === id);
+    return managedOrg(
+      this.get(id),
+      this.store.preference("defaultOrgId", null) === id,
+      this.remoteEnabled(id),
+    );
   }
   private async bootstrap(session: SalesforceCli.CliSession, soql: string) {
     const response = await fetch(
@@ -311,6 +321,7 @@ export class OrgManager {
       label?: string | undefined;
       color?: string | undefined;
       agentEnabled?: boolean | undefined;
+      remoteEnabled?: boolean | undefined;
     },
   ) {
     const org = this.get(id);
@@ -323,6 +334,8 @@ export class OrgManager {
         patch.agentEnabled === undefined ? org.agent_enabled : Number(patch.agentEnabled),
         id,
       );
+    if (patch.remoteEnabled !== undefined)
+      this.store.setPreference(`remote:org:${id}:enabled`, patch.remoteEnabled);
     return this.list();
   }
   setDefault(id: string) {
@@ -333,6 +346,7 @@ export class OrgManager {
   remove(id: string) {
     this.get(id);
     this.store.db.prepare("DELETE FROM orgs WHERE id=?").run(id);
+    this.store.setPreference(`remote:org:${id}:enabled`, false);
     if (this.store.preference("defaultOrgId", null) === id)
       this.store.setPreference("defaultOrgId", this.rows()[0]?.id ?? null);
     this.store.activity("org_reference_removed", id);
@@ -353,7 +367,11 @@ export class OrgManager {
           id,
         );
     }
-    return managedOrg(this.get(id), this.store.preference("defaultOrgId", null) === id);
+    return managedOrg(
+      this.get(id),
+      this.store.preference("defaultOrgId", null) === id,
+      this.remoteEnabled(id),
+    );
   }
   async sandboxes(id: string) {
     const org = this.get(id);

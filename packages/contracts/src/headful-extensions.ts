@@ -124,7 +124,10 @@ export const headfulExtensionManifestSchema = z
     entryPoints: z
       .strictObject({
         server: relativePath.default("./dist/index.js"),
-        web: relativePath.optional(),
+        electronMain: relativePath.optional(),
+        renderer: relativePath.optional(),
+        mobile: relativePath.optional(),
+        worker: relativePath.optional(),
       })
       .default({ server: "./dist/index.js" }),
     defaultEnabled: z.boolean().default(false),
@@ -149,6 +152,7 @@ export const headfulExtensionManifestSchema = z
           "local:harness-files",
           "local:mcp-transport",
           "local:mcp-app-resources",
+          "local:remote-transport",
         ]),
       )
       .max(20)
@@ -166,6 +170,41 @@ export const headfulExtensionManifestSchema = z
       .default([]),
     contributions: z
       .strictObject({
+        menuBar: z
+          .array(
+            z.strictObject({
+              id: componentId,
+              name: z.string().min(1).max(100),
+              commandId: commandId.optional(),
+              routeId: componentId.optional(),
+              requiredFeatures: contributionFeatures,
+              order: z.number().int().min(0).max(1000).default(100),
+            }),
+          )
+          .max(30)
+          .default([]),
+        statuses: z
+          .array(
+            z.strictObject({
+              id: componentId,
+              name: z.string().min(1).max(100),
+            }),
+          )
+          .max(20)
+          .default([]),
+        capabilities: z
+          .array(
+            z.strictObject({
+              id: extensionContributionIdSchema,
+              operations: z.array(z.string().min(1).max(100)).min(1).max(100),
+            }),
+          )
+          .max(30)
+          .default([]),
+        events: z
+          .array(z.enum(["org-policy-changed", "default-org-changed", "feature-changed"]))
+          .max(3)
+          .default([]),
         features: z.array(extensionFeatureSchema).max(30).default([]),
         components: z.array(extensionComponentSchema).max(100).default([]),
         navigation: z.array(extensionNavigationSchema).max(50).default([]),
@@ -249,6 +288,9 @@ export const headfulExtensionManifestSchema = z
                     key: extensionIdSchema,
                     type: z.enum(["boolean", "string", "number"]),
                     required: z.boolean().default(false),
+                    label: z.string().max(100).optional(),
+                    description: z.string().max(500).optional(),
+                    secret: z.boolean().default(false),
                   }),
                 )
                 .max(30)
@@ -271,6 +313,10 @@ export const headfulExtensionManifestSchema = z
           .default([]),
       })
       .default({
+        menuBar: [],
+        statuses: [],
+        capabilities: [],
+        events: [],
         features: [],
         components: [],
         navigation: [],
@@ -305,6 +351,9 @@ export const headfulExtensionManifestSchema = z
       ["dependencies"],
     );
     for (const key of [
+      "menuBar",
+      "statuses",
+      "capabilities",
       "features",
       "components",
       "navigation",
@@ -362,6 +411,24 @@ export const headfulExtensionManifestSchema = z
             "componentId",
           ]);
       }
+    for (const [index, menu] of manifest.contributions.menuBar.entries()) {
+      if ((!menu.commandId && !menu.routeId) || (menu.commandId && menu.routeId))
+        issue("Menu items reference exactly one command or route.", [
+          "contributions",
+          "menuBar",
+          index,
+        ]);
+      if (
+        menu.commandId &&
+        !manifest.contributions.commands.some((command) => command.id === menu.commandId)
+      )
+        issue("Menu item references a missing command.", ["contributions", "menuBar", index]);
+      if (menu.routeId && !manifest.contributions.routes.some((route) => route.id === menu.routeId))
+        issue("Menu item references a missing route.", ["contributions", "menuBar", index]);
+    }
+    for (const capability of manifest.contributions.capabilities)
+      if (!capability.id.startsWith(`${manifest.id}/`))
+        issue("Capabilities use their extension namespace.", ["contributions", "capabilities"]);
     for (const [index, action] of manifest.contributions.actions.entries())
       if (!manifest.contributions.commands.some((command) => command.id === action.commandId))
         issue("A contributed action must reference a declared command.", [
@@ -372,6 +439,18 @@ export const headfulExtensionManifestSchema = z
         ]);
   });
 export type HeadfulExtensionManifest = z.output<typeof headfulExtensionManifestSchema>;
+export const extensionStatusValueSchema = z.strictObject({
+  id: componentId,
+  label: z.string().max(200),
+  state: z.enum(["unconfigured", "connecting", "online", "offline", "error", "idle"]),
+  clientCount: z.number().int().min(0).max(100).optional(),
+  targetOrgIds: z.array(z.string().max(100)).max(100).default([]),
+});
+export type HeadfulExtensionStatus = z.output<typeof extensionStatusValueSchema>;
+export type HeadfulExtensionEvent =
+  | { type: "org-policy-changed"; orgId: string }
+  | { type: "default-org-changed"; orgId: string | null }
+  | { type: "feature-changed"; id: string; enabled: boolean };
 export const headfulExtensionDescriptorSchema = z.strictObject({
   manifest: headfulExtensionManifestSchema,
   enabled: z.boolean(),
@@ -385,6 +464,8 @@ export const headfulExtensionDescriptorSchema = z.strictObject({
     "error",
   ]),
   compatible: z.boolean(),
+  runtimeStatuses: z.array(extensionStatusValueSchema).max(20).default([]),
+  registeredCapabilities: z.array(extensionContributionIdSchema).max(30).default([]),
   error: z.strictObject({ code: z.string().max(100), message: z.string().max(500) }).optional(),
 });
 export const headfulExtensionsSchema = z.strictObject({
@@ -445,6 +526,14 @@ export function resolveHeadfulContributions(
     actions: extensions
       .flatMap((extension) =>
         extension.manifest.contributions.actions.map((item) => resolve(extension, item)),
+      )
+      .sort(order),
+    routes: extensions.flatMap((extension) =>
+      extension.manifest.contributions.routes.map((item) => resolve(extension, item)),
+    ),
+    menuBar: extensions
+      .flatMap((extension) =>
+        extension.manifest.contributions.menuBar.map((item) => resolve(extension, item)),
       )
       .sort(order),
     commands: extensions.flatMap((extension) =>
@@ -518,6 +607,8 @@ export interface HeadfulExtensionPaths {
   bridgeScript?: string;
   runtimeFile?: string;
   assetsDirectory?: string;
+  /** Host-resolved compiled entries; never arbitrary renderer supplied paths. */
+  extensionPackages?: Readonly<Record<string, string>>;
 }
 export interface HeadfulExtensionContext {
   readonly extensionId: string;
@@ -530,6 +621,11 @@ export interface HeadfulExtensionContext {
       authority: HeadfulAuthority,
     ): Promise<HeadfulResult<K>>;
   };
+  readonly status: { publish(value: z.input<typeof extensionStatusValueSchema>): void };
+  readonly events: {
+    subscribe(listener: (event: HeadfulExtensionEvent) => void | Promise<void>): () => void;
+  };
+  readonly capabilities: { register(id: string): HeadfulExtensionContext["runtime"] };
   readonly settings: {
     get(): Record<string, z.output<typeof extensionSettingValueSchema>>;
     set(values: Record<string, z.output<typeof extensionSettingValueSchema>>): void;
@@ -553,6 +649,8 @@ export interface HeadfulExtensionActivation {
  * reviewed package exports, never a URL, model-selected module or shell command. */
 export interface HeadfulExtensionDefinition {
   readonly manifest: z.input<typeof headfulExtensionManifestSchema>;
+  /** Added by the trusted loader after metadata validation. */
+  readonly compiledEntryPath?: string;
   activate(context: HeadfulExtensionContext): Promise<HeadfulExtensionActivation>;
   recover?(context: HeadfulExtensionContext, operation: string, input: unknown): Promise<unknown>;
 }

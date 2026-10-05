@@ -12,6 +12,8 @@ import { HeadfulWorkspaceShell } from "./HeadfulWorkspaceShell";
 
 const contributions: ReturnType<typeof resolveHeadfulContributions> = {
   navigation: [],
+  routes: [],
+  menuBar: [],
   panels: [],
   actions: [],
   commands: [],

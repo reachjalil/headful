@@ -7,6 +7,7 @@ export interface Principal {
   scopes: string[];
   grantId?: string;
   kind: "desktop" | "mcp";
+  source?: "connect";
 }
 export interface Org {
   id: string;

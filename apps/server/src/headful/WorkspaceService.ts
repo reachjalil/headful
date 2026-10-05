@@ -133,12 +133,18 @@ export function makeHeadfulRuntime(options: {
         accountRequired: false,
         ...state,
         orgs: state.orgs.filter(
-          (o) => p.kind === "desktop" || (o.agentEnabled && p.orgIds?.includes(o.id)),
+          (o) =>
+            p.kind === "desktop" ||
+            ((p.source === "connect" ? o.remoteEnabled : o.agentEnabled) &&
+              p.orgIds?.includes(o.id)),
         ),
         defaultOrgId:
           p.kind === "desktop" ||
           state.orgs.some(
-            (o) => o.id === state.defaultOrgId && o.agentEnabled && p.orgIds?.includes(o.id),
+            (o) =>
+              o.id === state.defaultOrgId &&
+              (p.source === "connect" ? o.remoteEnabled : o.agentEnabled) &&
+              p.orgIds?.includes(o.id),
           )
             ? state.defaultOrgId
             : null,
@@ -180,17 +186,23 @@ export function makeHeadfulRuntime(options: {
     "orgs.update": async (i, p) => {
       desktopOnly(p);
       features.require("org-management");
-      return orgs.update(i.orgId, i);
+      const result = orgs.update(i.orgId, i);
+      await extensions.publishEvent({ type: "org-policy-changed", orgId: i.orgId });
+      return result;
     },
     "orgs.default": async (i, p) => {
       desktopOnly(p);
       features.require("org-management");
-      return orgs.setDefault(i.orgId);
+      const result = orgs.setDefault(i.orgId);
+      await extensions.publishEvent({ type: "default-org-changed", orgId: i.orgId });
+      return result;
     },
     "orgs.remove": async (i, p) => {
       desktopOnly(p);
       features.require("org-management");
-      return orgs.remove(i.orgId);
+      const result = orgs.remove(i.orgId);
+      await extensions.publishEvent({ type: "org-policy-changed", orgId: i.orgId });
+      return result;
     },
     "orgs.health": async (i, p) => {
       workspaceScope(p);
@@ -206,7 +218,9 @@ export function makeHeadfulRuntime(options: {
       desktopOnly(p);
       const org = orgs.get(i.orgId);
       await cli.logout(org.username);
-      return orgs.remove(i.orgId);
+      const result = orgs.remove(i.orgId);
+      await extensions.publishEvent({ type: "org-policy-changed", orgId: i.orgId });
+      return result;
     },
     "orgs.sandboxes": async (i, p) => {
       workspaceScope(p);
@@ -222,6 +236,7 @@ export function makeHeadfulRuntime(options: {
       features.set(i.id, i.enabled);
       utilities.cancelUnavailable();
       await extensions.featureChanged(i.id, i.enabled);
+      await extensions.publishEvent({ type: "feature-changed", id: i.id, enabled: i.enabled });
       return features.list();
     },
     "onboarding.complete": async (i, p) => {
@@ -246,7 +261,10 @@ export function makeHeadfulRuntime(options: {
       const rows = orgs
         .rows()
         .filter(
-          (o) => p.kind === "desktop" || (Boolean(o.agent_enabled) && p.orgIds?.includes(o.id)),
+          (o) =>
+            p.kind === "desktop" ||
+            ((p.source === "connect" ? orgs.remoteEnabled(o.id) : Boolean(o.agent_enabled)) &&
+              p.orgIds?.includes(o.id)),
         );
       return { orgs: rows.map(OrgService.publicOrg) };
     },
@@ -403,9 +421,20 @@ export function makeHeadfulRuntime(options: {
         "Review the required fields and formats for this action.",
       );
     const parsed = decoded.data;
+    if (authority.source === "connect" && authority.kind !== "mcp")
+      throw new HttpError(
+        403,
+        "authority_invalid",
+        "Remote transport cannot grant human desktop authority.",
+      );
     if (authority.kind === "mcp") {
-      features.require("local-mcp");
-      features.require("external-harness");
+      if (authority.source === "connect") {
+        extensions.requireActive("connect-desktop");
+        features.require("connect-desktop/remote-access");
+      } else {
+        features.require("local-mcp");
+        features.require("external-harness");
+      }
       features.require("org-management");
       if (!authority.clientId || !authority.orgIds || !authority.scopes)
         throw new HttpError(403, "grant_required", "A current local client grant is required.");
@@ -416,7 +445,13 @@ export function makeHeadfulRuntime(options: {
     const principal: Principal = {
       user: { id: "local-headful-owner" },
       kind: authority.kind,
-      orgIds: authority.kind === "desktop" ? null : (authority.orgIds ?? []),
+      ...(authority.source ? { source: authority.source } : {}),
+      orgIds:
+        authority.kind === "desktop"
+          ? null
+          : (authority.orgIds ?? []).filter(
+              (id) => authority.source !== "connect" || orgs.remoteEnabled(id),
+            ),
       scopes:
         authority.kind === "desktop"
           ? [

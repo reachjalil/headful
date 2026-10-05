@@ -10,7 +10,7 @@ Feature registry decisions apply in service dispatch and MCP discovery as well a
 
 Every packaged application includes its shared native workspace and the compiled public utility Extension. Builds with the optional proprietary agent Extension also include local MCP App HTML/CSS/JavaScript and its stdio helper. No desktop product asset or Salesforce request depends on Headful Cloud. Generic MCP clients get structured and text results. Host rendering and fullscreen capabilities are feature detected; native-host acceptance is separate from protocol and fixture checks.
 
-`apps/mobile` and shared T3 client foundations remain intact. Initial development and packaging are Mac-only, and there is no mobile distribution or unauthenticated remote Salesforce endpoint in this release.
+`apps/mobile` and shared T3 client foundations remain intact. Desktop packaging remains Mac-only. The optional compiled Connect Extension supplies authenticated outbound remote transport and a minimal private controlled-client development journey; there is no native mobile distribution or unauthenticated remote Salesforce endpoint. It shares the authoritative Salesforce runtime, with separate per-org remote opt-in and non-human grant authority.
 
 ## Provenance and notices
 

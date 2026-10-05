@@ -22,6 +22,7 @@ function org(id: string, overrides: Partial<ChatOrg> = {}): ChatOrg {
     alias: "qa",
     color: "#626dd2",
     agentEnabled: true,
+    remoteEnabled: false,
     isDefault: false,
     connectionVersion: 1,
     ...overrides,

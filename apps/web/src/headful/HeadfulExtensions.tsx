@@ -24,11 +24,13 @@ export function HeadfulExtensions({
   action,
   onChanged,
   onSettings,
+  focusExtensionId,
 }: {
   busy: boolean;
   action: (label: string, run: () => Promise<void>) => Promise<void>;
   onChanged: () => Promise<void>;
   onSettings: () => void;
+  focusExtensionId?: string | undefined;
 }) {
   const [extensions, setExtensions] = useState<HeadfulExtensionDescriptor[] | null>(null);
   const [apiVersion, setApiVersion] = useState<number | null>(null);
@@ -53,6 +55,10 @@ export function HeadfulExtensions({
   useEffect(() => {
     void action("Reading installed extensions", load);
   }, [action, load]);
+  useEffect(() => {
+    if (focusExtensionId && extensions)
+      document.getElementById(`extension-${focusExtensionId}`)?.scrollIntoView({ block: "start" });
+  }, [focusExtensionId, extensions]);
   const toggle = (extension: HeadfulExtensionDescriptor) => {
     setNotice("");
     if (extension.enabled) {
@@ -86,12 +92,18 @@ export function HeadfulExtensions({
       setSurface({ extensionId: extension.manifest.id, ...result });
     });
   };
-  const runCommand = (extension: HeadfulExtensionDescriptor, command: string) => {
+  const runCommand = (
+    extension: HeadfulExtensionDescriptor,
+    command: string,
+    input: Record<string, string | number | boolean> = {},
+  ) => {
     void action(`Running ${extension.manifest.name} command`, async () => {
       const result = headfulExtensionResultSchemas["extensions.command"].parse(
-        await dispatch("extensions.command", { id: extension.manifest.id, command, input: {} }),
+        await dispatch("extensions.command", { id: extension.manifest.id, command, input }),
       );
       setCommandResult({ extensionId: extension.manifest.id, ...result });
+      await load();
+      await onChanged();
     });
   };
   return (
@@ -197,7 +209,11 @@ export function HeadfulExtensions({
             },
           ];
           return (
-            <article className="hf-card hf-extension-card" key={manifest.id}>
+            <article
+              className="hf-card hf-extension-card"
+              key={manifest.id}
+              id={`extension-${manifest.id}`}
+            >
               <div className="hf-card-heading">
                 <div>
                   <div className="hf-extension-title">
@@ -270,6 +286,14 @@ export function HeadfulExtensions({
                   </dd>
                 </div>
               </dl>
+              {extension.runtimeStatuses.map((value) => (
+                <p className="hf-note" role="status" key={value.id}>
+                  {value.label} · {value.state}
+                  {value.clientCount === undefined
+                    ? ""
+                    : ` · ${value.clientCount} connected clients`}
+                </p>
+              ))}
               {(contributions.surfaces.length > 0 || contributions.commands.length > 0) && (
                 <div className="hf-extension-actions">
                   {contributions.surfaces.map((value) => (
@@ -285,7 +309,7 @@ export function HeadfulExtensions({
                     </button>
                   ))}
                   {contributions.commands
-                    .filter((value) => !value.parameters.some((parameter) => parameter.required))
+                    .filter((value) => value.parameters.length === 0)
                     .map((value) => (
                       <button
                         className="hf-button"
@@ -300,6 +324,16 @@ export function HeadfulExtensions({
                     ))}
                 </div>
               )}
+              {contributions.commands
+                .filter((command) => command.parameters.length > 0)
+                .map((command) => (
+                  <ExtensionCommandForm
+                    key={command.id}
+                    command={command}
+                    disabled={busy || extension.status !== "active"}
+                    onRun={(input) => runCommand(extension, command.id, input)}
+                  />
+                ))}
               {surface?.extensionId === manifest.id && (
                 <section className="hf-extension-output" aria-label={surface.title}>
                   <div className="hf-card-heading">
@@ -505,5 +539,68 @@ function ExtensionSettings({
         </form>
       )}
     </section>
+  );
+}
+
+function ExtensionCommandForm({
+  command,
+  disabled,
+  onRun,
+}: {
+  command: HeadfulExtensionDescriptor["manifest"]["contributions"]["commands"][number];
+  disabled: boolean;
+  onRun: (input: Record<string, string | number | boolean>) => void;
+}) {
+  const submit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    const input: Record<string, string | number | boolean> = {};
+    for (const parameter of command.parameters) {
+      const value = data.get(parameter.key);
+      if (parameter.type === "boolean") input[parameter.key] = data.has(parameter.key);
+      else if (typeof value === "string" && (value.length > 0 || parameter.required))
+        input[parameter.key] = parameter.type === "number" ? Number(value) : value;
+    }
+    // Secrets are one-use command inputs, never settings or persisted form defaults.
+    for (const parameter of command.parameters)
+      if (parameter.secret) {
+        const control = form.elements.namedItem(parameter.key);
+        if (control instanceof HTMLInputElement) control.value = "";
+      }
+    onRun(input);
+  };
+  return (
+    <details className="hf-advanced">
+      <summary>{command.name}</summary>
+      <p>{command.description}</p>
+      <form onSubmit={submit} autoComplete="off">
+        {command.parameters.map((parameter) => (
+          <label className="hf-field" key={parameter.key}>
+            {parameter.label ?? parameter.key}
+            <input
+              name={parameter.key}
+              type={
+                parameter.type === "boolean"
+                  ? "checkbox"
+                  : parameter.secret
+                    ? "password"
+                    : parameter.type === "number"
+                      ? "number"
+                      : "text"
+              }
+              required={parameter.required}
+              disabled={disabled}
+              maxLength={parameter.type === "string" ? 2000 : undefined}
+              step={parameter.type === "number" ? "any" : undefined}
+            />
+            {parameter.description && <small>{parameter.description}</small>}
+          </label>
+        ))}
+        <button className="hf-button hf-primary" type="submit" disabled={disabled}>
+          {command.name}
+        </button>
+      </form>
+    </details>
   );
 }

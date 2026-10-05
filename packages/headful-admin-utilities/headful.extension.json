@@ -11,7 +11,7 @@
   "sourceClassification": "open-source",
   "entryPoints": {
     "server": "./dist/index.js",
-    "web": "./src/web/index.tsx"
+    "renderer": "./src/web/index.tsx"
   },
   "defaultEnabled": true,
   "dependencies": [],

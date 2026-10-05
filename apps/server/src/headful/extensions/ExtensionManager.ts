@@ -7,6 +7,9 @@ import {
   extensionSettingsSchema,
   extensionCommandResultSchema,
   extensionSurfaceResultSchema,
+  extensionStatusValueSchema,
+  type HeadfulExtensionStatus,
+  type HeadfulExtensionEvent,
   type HeadfulExtensionActivation,
   type HeadfulExtensionContext,
   type HeadfulExtensionDefinition,
@@ -43,6 +46,9 @@ type Entry = {
   controller?: AbortController;
   activation?: HeadfulExtensionActivation;
   cleanupFailed?: boolean;
+  runtimeStatuses?: Map<string, HeadfulExtensionStatus>;
+  registeredCapabilities?: Set<string>;
+  listeners?: Set<(event: HeadfulExtensionEvent) => void | Promise<void>>;
 };
 const permittedOperations = new Set<string>(headfulExtensionOperations);
 const desktopReads = new Set<string>(["status", "listOrgs"]);
@@ -79,7 +85,16 @@ export class ExtensionManager {
     this.store = options.store;
     this.features = options.features;
     this.runtime = options.runtime;
-    this.paths = Object.freeze({ ...options.paths });
+    this.paths = Object.freeze({
+      ...options.paths,
+      extensionPackages: Object.freeze(
+        Object.fromEntries(
+          options.definitions
+            .filter((definition) => definition.compiledEntryPath)
+            .map((definition) => [definition.manifest.packageName, definition.compiledEntryPath!]),
+        ),
+      ),
+    });
     const desktop = new Set<string>(),
       routes = new Set<string>();
     let mcpOwner: string | undefined;
@@ -119,6 +134,13 @@ export class ExtensionManager {
             "An extension route references a missing surface.",
           );
       }
+      for (const capability of manifest.contributions.capabilities)
+        if (capability.operations.some((operation) => !permittedOperations.has(operation)))
+          throw new HttpError(
+            400,
+            "extension_capability_invalid",
+            "Capabilities may reference only controlled Headful services.",
+          );
       for (const operation of manifest.contributions.desktopOperations) {
         if (
           desktop.has(operation.id) ||
@@ -216,6 +238,12 @@ export class ExtensionManager {
       enabled: this.desired(entry),
       compatible: entry.manifest.apiVersion === headfulExtensionApiVersion,
       status: !this.desired(entry) ? "disabled" : entry.status,
+      runtimeStatuses: this.active(entry.manifest.id)
+        ? [...(entry.runtimeStatuses?.values() ?? [])]
+        : [],
+      registeredCapabilities: this.active(entry.manifest.id)
+        ? [...(entry.registeredCapabilities ?? [])]
+        : [],
       ...(entry.error ? { error: entry.error } : {}),
     };
   }
@@ -297,6 +325,16 @@ export class ExtensionManager {
               "extension_operation_denied",
               "Extensions cannot issue human reviews or execute Salesforce writes.",
             );
+          if (
+            authority.source === "connect" &&
+            (authority.kind !== "mcp" ||
+              !entry.manifest.permissions.includes("local:remote-transport"))
+          )
+            throw new HttpError(
+              403,
+              "extension_remote_denied",
+              "This extension has not declared remote transport authority.",
+            );
           const utilityPolicy = Object.hasOwn(utilityOperationPolicies, operation)
             ? utilityOperationPolicies[operation as HeadfulUtilityOperation]
             : undefined;
@@ -329,6 +367,58 @@ export class ExtensionManager {
           return result;
         },
       },
+      status: {
+        publish: (value) => {
+          assertContext();
+          const parsed = extensionStatusValueSchema.parse(value);
+          if (!entry.manifest.contributions.statuses.some((status) => status.id === parsed.id))
+            throw new HttpError(
+              403,
+              "extension_status_undeclared",
+              "Status must be declared in the manifest.",
+            );
+          (entry.runtimeStatuses ??= new Map()).set(parsed.id, parsed);
+        },
+      },
+      events: {
+        subscribe: (listener) => {
+          assertContext();
+          (entry.listeners ??= new Set()).add(listener);
+          const remove = () => entry.listeners?.delete(listener);
+          signal.addEventListener("abort", remove, { once: true });
+          return () => {
+            remove();
+            signal.removeEventListener("abort", remove);
+          };
+        },
+      },
+      capabilities: {
+        register: (capabilityId) => {
+          assertContext();
+          const capability = entry.manifest.contributions.capabilities.find(
+            (value) => value.id === capabilityId,
+          );
+          if (!capability)
+            throw new HttpError(
+              403,
+              "extension_capability_undeclared",
+              "Declare the capability before registering it.",
+            );
+          (entry.registeredCapabilities ??= new Set()).add(capabilityId);
+          return {
+            dispatch: (operation, input, authority) => {
+              assertContext();
+              if (!capability.operations.includes(operation))
+                throw new HttpError(
+                  403,
+                  "extension_capability_denied",
+                  "This operation is outside the registered capability.",
+                );
+              return context.runtime.dispatch(operation, input, authority);
+            },
+          };
+        },
+      },
       settings: {
         get: () => this.settings(id).values,
         set: (values) => {
@@ -359,6 +449,23 @@ export class ExtensionManager {
       },
     };
     return Object.freeze(context);
+  }
+  async publishEvent(event: HeadfulExtensionEvent) {
+    for (const entry of this.entries.values())
+      if (
+        this.active(entry.manifest.id) &&
+        entry.manifest.contributions.events.includes(event.type)
+      )
+        for (const listener of entry.listeners ?? []) {
+          try {
+            await listener(event);
+          } catch {
+            entry.error = {
+              code: "extension_event_failed",
+              message: "An extension could not handle a host event. Check its connection state.",
+            };
+          }
+        }
   }
   private enqueue(work: () => Promise<void>) {
     const next = this.queue.then(work);
@@ -399,6 +506,9 @@ export class ExtensionManager {
     const activation = entry.activation;
     delete entry.activation;
     delete entry.controller;
+    entry.runtimeStatuses?.clear();
+    entry.registeredCapabilities?.clear();
+    entry.listeners?.clear();
     entry.status = "inactive";
     if (activation) {
       try {
@@ -472,6 +582,9 @@ export class ExtensionManager {
           await activation.dispose();
           entry.status = "disabled";
           delete entry.controller;
+          entry.runtimeStatuses?.clear();
+          entry.registeredCapabilities?.clear();
+          entry.listeners?.clear();
           return;
         }
         if (
@@ -495,6 +608,9 @@ export class ExtensionManager {
       } catch {
         controller.abort();
         delete entry.controller;
+        entry.runtimeStatuses?.clear();
+        entry.registeredCapabilities?.clear();
+        entry.listeners?.clear();
         entry.status = "error";
         entry.error = {
           code: "extension_activation_failed",

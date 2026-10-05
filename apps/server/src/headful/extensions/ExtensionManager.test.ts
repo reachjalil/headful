@@ -542,3 +542,52 @@ describe("trusted Headful extensions", () => {
     ).toBe(false);
   });
 });
+
+describe("native status, event and capability contributions", () => {
+  it("publishes only declared bounded status and removes listeners/capabilities on disposal", async () => {
+    const f = fixture("contributions", { defaultEnabled: true });
+    const definition: HeadfulExtensionDefinition = {
+      ...f.definition,
+      manifest: {
+        ...f.definition.manifest,
+        contributions: {
+          ...f.definition.manifest.contributions,
+          statuses: [{ id: "connection", name: "Connection" }],
+          events: ["default-org-changed"],
+          capabilities: [{ id: "contributions/reader", operations: ["status"] }],
+        },
+      },
+    };
+    const c = setup([definition]);
+    await c.runtime.dispatch("status", {}, desktop);
+    const context = f.state.context!;
+    const events: string[] = [];
+    context.events.subscribe((event) => {
+      events.push(event.type);
+    });
+    const port = context.capabilities.register("contributions/reader");
+    expect((await port.dispatch("status", {}, desktop)).product).toBe("Headful");
+    expect(() => port.dispatch("listOrgs", {}, desktop)).toThrow(
+      "outside the registered capability",
+    );
+    expect(() =>
+      context.status.publish({ id: "undeclared", state: "online", label: "Hidden" }),
+    ).toThrow("declared");
+    context.status.publish({
+      id: "connection",
+      state: "online",
+      label: "Connected",
+      clientCount: 1,
+    });
+    expect(c.runtime.extensions.inspect("contributions").runtimeStatuses[0]?.clientCount).toBe(1);
+    await c.runtime.extensions.publishEvent({ type: "default-org-changed", orgId: null });
+    await c.runtime.extensions.publishEvent({ type: "org-policy-changed", orgId: "unrelated" });
+    expect(events).toEqual(["default-org-changed"]);
+    await c.runtime.dispatch("extensions.disable", { id: "contributions" }, desktop);
+    await c.runtime.extensions.publishEvent({ type: "default-org-changed", orgId: null });
+    expect(events).toHaveLength(1);
+    expect(c.runtime.extensions.inspect("contributions").registeredCapabilities).toEqual([]);
+    expect(c.runtime.extensions.inspect("contributions").runtimeStatuses).toEqual([]);
+    expect(() => port.dispatch("status", {}, desktop)).toThrow("stopped");
+  });
+});

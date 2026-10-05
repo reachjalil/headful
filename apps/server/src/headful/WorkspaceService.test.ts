@@ -221,6 +221,34 @@ const mcpExtensionFixture: HeadfulExtensionDefinition = {
   },
   activate: async () => ({ dispose() {} }),
 };
+const connectExtensionFixture: HeadfulExtensionDefinition = {
+  manifest: {
+    schemaVersion: 1,
+    apiVersion: 1,
+    id: "connect-desktop",
+    name: "Fixture remote connection",
+    description: "Trusted remote fixture.",
+    packageName: "@headfulcloud/connect-desktop",
+    version: "1.0.0",
+    license: "MIT",
+    source: "bundled",
+    defaultEnabled: true,
+    permissions: ["salesforce:read", "local:remote-transport"],
+    contributions: {
+      features: [
+        {
+          id: "connect-desktop/remote-access",
+          name: "Remote access",
+          description: "Fixture remote gate.",
+          defaultEnabled: true,
+          dependencies: ["org-management"],
+          route: "extensions",
+        },
+      ],
+    },
+  },
+  activate: async () => ({ dispose() {} }),
+};
 function setup() {
   const folder = mkdtempSync(join(tmpdir(), "headful-domain-"));
   const store = new LocalStore(folder);
@@ -254,7 +282,7 @@ function setup() {
     homeDir: folder,
     store,
     cli,
-    extensions: [mcpExtensionFixture],
+    extensions: [mcpExtensionFixture, connectExtensionFixture],
   });
   const agent = {
     kind: "mcp" as const,
@@ -701,6 +729,60 @@ describe("local permission-set review safety", () => {
         c.runtime.dispatch("applyPermissionProposal", input, desktop),
       ).rejects.toMatchObject({ code: "proposal_unavailable" });
       expect(p.writes).toBe(1);
+    } finally {
+      await c.close();
+    }
+  });
+});
+
+describe("Connect authority shares the local org policy", () => {
+  it("requires an independent remote opt-in, keeps explicit grant orgs and loses access immediately", async () => {
+    const c = setup();
+    try {
+      const remote: HeadfulAuthority = { ...c.agent, source: "connect" };
+      await c.runtime.dispatch("extensions.disable", { id: "mcp-apps" }, desktop);
+      expect((await c.runtime.dispatch("listOrgs", {}, remote)).orgs).toEqual([]);
+      await expect(
+        c.runtime.dispatch("listPermissionSets", { orgId: c.orgId }, remote),
+      ).rejects.toMatchObject({ code: "org_missing" });
+      await c.runtime.dispatch(
+        "orgs.update",
+        { orgId: c.orgId, remoteEnabled: true, agentEnabled: false },
+        desktop,
+      );
+      expect((await c.runtime.dispatch("listOrgs", {}, remote)).orgs.map((org) => org.id)).toEqual([
+        c.orgId,
+      ]);
+      expect((await c.runtime.dispatch("listOrgs", {}, { ...remote, orgIds: [] })).orgs).toEqual(
+        [],
+      );
+      await expect(
+        c.runtime.dispatch(
+          "reviewPermissionProposal",
+          { proposalId: "fictional_proposal_0001", digest: "a".repeat(43) },
+          remote,
+        ),
+      ).rejects.toMatchObject({ code: "desktop_required" });
+      await c.runtime.dispatch("orgs.update", { orgId: c.orgId, remoteEnabled: false }, desktop);
+      expect((await c.runtime.dispatch("listOrgs", {}, remote)).orgs).toEqual([]);
+      await expect(
+        c.runtime.dispatch("listPermissionSets", { orgId: c.orgId }, remote),
+      ).rejects.toMatchObject({ code: "org_missing" });
+      await c.runtime.dispatch("extensions.disable", { id: "connect-desktop" }, desktop);
+      await expect(c.runtime.dispatch("listOrgs", {}, remote)).rejects.toMatchObject({
+        code: "extension_disabled",
+      });
+      expect((await c.runtime.dispatch("orgs.list", {}, desktop)).orgs).toHaveLength(1);
+    } finally {
+      await c.close();
+    }
+  });
+  it("cannot turn remote routing into desktop human authority", async () => {
+    const c = setup();
+    try {
+      await expect(
+        c.runtime.dispatch("orgs.list", {}, { kind: "desktop", source: "connect" }),
+      ).rejects.toMatchObject({ code: "authority_invalid" });
     } finally {
       await c.close();
     }

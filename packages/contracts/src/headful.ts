@@ -62,6 +62,7 @@ export const headfulInputSchemas = {
       .regex(/^#[a-fA-F0-9]{6}$/)
       .optional(),
     agentEnabled: z.boolean().optional(),
+    remoteEnabled: z.boolean().optional(),
   }),
   "orgs.default": org,
   "orgs.remove": org,
@@ -127,6 +128,8 @@ export type HeadfulOperation = keyof typeof headfulInputSchemas;
 export type HeadfulInput<K extends HeadfulOperation> = z.input<(typeof headfulInputSchemas)[K]>;
 export interface HeadfulAuthority {
   kind: "desktop" | "mcp";
+  /** Connect remains non-human authority, independently gated from local MCP. */
+  source?: "connect";
   clientId?: string;
   orgIds?: string[];
   scopes?: string[];
@@ -161,6 +164,7 @@ const managedOrgSchema = orgSchema.extend({
   alias: z.string(),
   color: z.string().regex(/^#[a-fA-F0-9]{6}$/),
   agentEnabled: z.boolean(),
+  remoteEnabled: z.boolean().default(false),
   isDefault: z.boolean(),
   connectionVersion: z.number().int().positive(),
 });

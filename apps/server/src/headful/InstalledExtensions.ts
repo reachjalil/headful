@@ -1,5 +1,6 @@
 // @effect-diagnostics nodeBuiltinImport:off preferSchemaOverJson:off
 import { createRequire } from "node:module";
+import { dirname, resolve } from "node:path";
 import { readFile } from "node:fs/promises";
 import { z } from "zod";
 import registrations from "../../../../headful.extensions.json" with { type: "json" };
@@ -65,6 +66,10 @@ export async function loadInstalledExtensions(): Promise<HeadfulExtensionDefinit
     if (manifest.packageName !== registration.packageName || ids.has(manifest.id))
       throw new Error("Headful extension manifest identity does not match its registration.");
     ids.add(manifest.id);
+    const compiledEntryPath = require.resolve(registration.packageName);
+    const packageDirectory = dirname(require.resolve(`${registration.packageName}/package.json`));
+    if (compiledEntryPath !== resolve(packageDirectory, manifest.entryPoints.server))
+      throw new Error("Extension package entry must match its declared server execution context.");
     const module: unknown = await import(registration.packageName);
     if (typeof module !== "object" || module === null || !("default" in module))
       throw new Error("Headful extension must export its activation definition as default.");
@@ -74,7 +79,7 @@ export async function loadInstalledExtensions(): Promise<HeadfulExtensionDefinit
       JSON.stringify(manifest)
     )
       throw new Error("Headful extension code and manifest must declare the same contributions.");
-    definitions.push(definition);
+    definitions.push({ ...definition, compiledEntryPath });
   }
   return definitions;
 }

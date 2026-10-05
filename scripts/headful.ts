@@ -104,7 +104,7 @@ if (mode === "setup") {
     "--target",
     "zip",
     "--build-version",
-    "0.2.0",
+    "0.3.0",
     "--output-dir",
     resolve(root, "artifacts/headful"),
     ...process.argv.slice(3),

@@ -5,6 +5,12 @@ import * as Electron from "electron";
 import * as FS from "node:fs/promises";
 import * as Path from "node:path";
 import { signDesktopRequest } from "./DesktopCapability.ts";
+import { headfulResultSchemas } from "@t3tools/contracts/headful";
+import {
+  headfulExtensionsSchema,
+  resolveHeadfulContributions,
+  type HeadfulExtensionDescriptor,
+} from "@t3tools/contracts/headful-extensions";
 import { locationSchema } from "@t3tools/contracts/headful-workspace/contract-schema";
 import * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
 import * as DesktopWindow from "../window/DesktopWindow.ts";
@@ -21,6 +27,7 @@ interface TrayOrg {
   instanceOrigin: string;
   color?: string;
   agentEnabled?: boolean;
+  remoteEnabled?: boolean;
 }
 const safeOrigin = (value: string) => /^http:\/\/127\.0\.0\.1:\d+$/.test(value);
 let pendingRoute: string | undefined;
@@ -134,7 +141,7 @@ export const register = Effect.gen(function* () {
     }
     if (operation === "system.about")
       return {
-        version: "0.2.0",
+        version: "0.3.0",
         ...(buildCommit ? { buildCommit } : {}),
         upstreamVersion: "0.0.45",
         upstreamCommit: "efecd3cf8bcec3d1891b5f5a27dc2f6d797c6448",
@@ -146,7 +153,12 @@ export const register = Effect.gen(function* () {
     if (operation === "system.openOrg") return rpc("orgs.open", input);
 
     const result = await rpc(operation, input);
-    if (operation.startsWith("orgs.") || operation.startsWith("features.")) await refresh();
+    if (
+      operation.startsWith("orgs.") ||
+      operation.startsWith("features.") ||
+      operation.startsWith("extensions.")
+    )
+      await refresh();
     return result;
   };
   const receiveRoute = (value: string) => {
@@ -221,10 +233,22 @@ export const register = Effect.gen(function* () {
     const known = ["violet", "lime", "blue", "orange", "rose", "template"].includes(mapped)
       ? mapped
       : "violet";
-    const image = Electron.nativeImage
+    let image = Electron.nativeImage
       .createFromPath(Path.join(iconRoot, `tray-${known}.png`))
       .resize({ width: 22, height: 22 });
-    image.setTemplateImage(known === "template");
+    if (/^#[a-fA-F0-9]{6}$/.test(color)) {
+      const bitmap = image.toBitmap();
+      const red = parseInt(color.slice(1, 3), 16),
+        green = parseInt(color.slice(3, 5), 16),
+        blue = parseInt(color.slice(5, 7), 16);
+      for (let index = 0; index < bitmap.length; index += 4) {
+        bitmap[index] = blue;
+        bitmap[index + 1] = green;
+        bitmap[index + 2] = red;
+      }
+      image = Electron.nativeImage.createFromBitmap(bitmap, { width: 22, height: 22 });
+    }
+    image.setTemplateImage(known === "template" && !color.startsWith("#"));
     return image;
   };
   const tray = new Electron.Tray(icon());
@@ -235,38 +259,37 @@ export const register = Effect.gen(function* () {
     let runtimeReady = false;
     let mcpEnabled = false;
     let clientCount = 0;
+    let installedExtensions: HeadfulExtensionDescriptor[] = [];
+    let features: { id: string; enabled: boolean }[] = [];
     try {
-      const result = await rpc("status");
-      if (typeof result === "object" && result && "orgs" in result && Array.isArray(result.orgs)) {
-        orgs = result.orgs;
-        defaultId =
-          "defaultOrgId" in result && typeof result.defaultOrgId === "string"
-            ? result.defaultOrgId
-            : null;
-        runtimeReady = true;
-        if ("features" in result && Array.isArray(result.features))
-          mcpEnabled = result.features.some(
-            (feature) => feature && feature.id === "local-mcp" && feature.enabled === true,
-          );
-      }
+      const result = headfulResultSchemas.status.parse(await rpc("status"));
+      orgs = result.orgs;
+      defaultId = result.defaultOrgId;
+      runtimeReady = true;
+      features = result.features;
+      mcpEnabled = result.features.some((feature) => feature.id === "local-mcp" && feature.enabled);
+      installedExtensions = headfulExtensionsSchema.parse(await rpc("extensions.list")).extensions;
       const value = await rpc("grants.list");
       if (value && typeof value === "object" && "grants" in value && Array.isArray(value.grants))
         clientCount = value.grants.filter((grant) => grant && grant.revokedAt === null).length;
     } catch {
       /* Menu remains useful while starting or after a recoverable runtime error. */
     }
+    const contributions = resolveHeadfulContributions(installedExtensions, features);
+    const environmentLabel = (org: TrayOrg) =>
+      org.isSandbox === null ? "Environment unverified" : org.isSandbox ? "Sandbox" : "Production";
     const active = orgs.find((org) => org.id === defaultId);
     tray.setImage(icon(active?.color));
     tray.setToolTip(
       active
-        ? `Headful — ${active.label} (${active.isSandbox ? "Sandbox" : "Production"})`
+        ? `Headful — ${active.label} (${environmentLabel(active)})`
         : "Headful — connect a Salesforce org",
     );
     const items: Electron.MenuItemConstructorOptions[] = [
       { label: "Headful", enabled: false },
       {
         label: active
-          ? `${active.label} · ${active.isSandbox ? "Sandbox" : "Production"} · ${active.status}`
+          ? `${active.label} · ${environmentLabel(active)} · ${active.status}`
           : runtimeReady
             ? "No default org selected"
             : "Local runtime starting…",
@@ -274,7 +297,7 @@ export const register = Effect.gen(function* () {
       },
       { type: "separator" },
       ...orgs.map((org) => ({
-        label: `${org.label} · ${org.isSandbox ? "Sandbox" : "Production"} · ${org.status}`,
+        label: `${org.label} · ${environmentLabel(org)} · ${org.status}`,
         type: "radio" as const,
         checked: org.id === defaultId,
         icon: icon(org.color),
@@ -300,6 +323,16 @@ export const register = Effect.gen(function* () {
                   orgId: active.id,
                   agentEnabled: active.agentEnabled === false,
                 })
+                  .then(refresh)
+                  .catch(report);
+              },
+            },
+            {
+              label: active.remoteEnabled
+                ? "Disable remote access for default org"
+                : "Allow remote grants for default org",
+              click: () => {
+                void rpc("orgs.update", { orgId: active.id, remoteEnabled: !active.remoteEnabled })
                   .then(refresh)
                   .catch(report);
               },
@@ -344,6 +377,43 @@ export const register = Effect.gen(function* () {
         },
       },
       { type: "separator" },
+      ...installedExtensions.flatMap((extension) =>
+        extension.runtimeStatuses.map((status) => ({
+          label: `${extension.manifest.name} · ${status.label}${status.clientCount === undefined ? "" : ` · ${status.clientCount} clients`}${status.targetOrgIds.length ? ` · ${status.targetOrgIds.map((id) => orgs.find((org) => org.id === id)?.label ?? "Unavailable org").join(", ")}` : ""}`,
+          enabled: false,
+        })),
+      ),
+      ...contributions.menuBar
+        .filter((item) => item.available)
+        .map((item): Electron.MenuItemConstructorOptions => ({
+          label: item.contribution.name,
+          click: () => {
+            const extension = installedExtensions.find(
+              (value) => value.manifest.id === item.extensionId,
+            );
+            const command = extension?.manifest.contributions.commands.find(
+              (value) => value.id === item.contribution.commandId,
+            );
+            if (command && command.parameters.length === 0)
+              void rpc("extensions.command", {
+                id: item.extensionId,
+                command: command.id,
+                input: {},
+              })
+                .then(refresh)
+                .catch(report);
+            else
+              void open(`extensions?extensionId=${encodeURIComponent(item.extensionId)}`).catch(
+                report,
+              );
+          },
+        })),
+      {
+        label: "Extensions…",
+        click: () => {
+          void open("extensions").catch(report);
+        },
+      },
       { label: "Quit Headful", accelerator: "Command+Q", click: () => Electron.app.quit() },
     ];
     tray.setContextMenu(Electron.Menu.buildFromTemplate(items));

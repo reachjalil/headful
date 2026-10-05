@@ -73,6 +73,7 @@ const managedOrgSchema = orgSchema.extend({
   alias: z.string(),
   color: z.string(),
   agentEnabled: z.boolean(),
+  remoteEnabled: z.boolean().default(false),
   isDefault: z.boolean(),
   connectionVersion: z.number(),
 });
@@ -305,6 +306,7 @@ function Modal({
 
 export function HeadfulShell() {
   const [page, setPage] = useState<Page>("orgs");
+  const [focusExtensionId, setFocusExtensionId] = useState<string | undefined>();
   const [status, setStatus] = useState<Status | null>(null);
   const [extensions, setExtensions] = useState<HeadfulExtensionDescriptor[]>([]);
   const [extensionSettings, setExtensionSettings] = useState<
@@ -384,6 +386,12 @@ export function HeadfulShell() {
     const [path = "orgs", query = ""] = value.replace(/^#\/?/, "").split("?");
     const known = pages.find((item) => item.id === path.split("/")[0]);
     if (!known) return;
+    if (known.id === "extensions") {
+      const extensionId = new URLSearchParams(query).get("extensionId");
+      setFocusExtensionId(
+        extensionId && /^[a-z][a-z0-9-]{0,63}$/.test(extensionId) ? extensionId : undefined,
+      );
+    }
     if (known.id === "workspace") {
       const parameters = Object.fromEntries(new URLSearchParams(query));
       const parsed = locationSchema.safeParse({
@@ -714,6 +722,22 @@ export function HeadfulShell() {
                 {item.title}
               </button>
             ))}
+          {contributions.routes
+            .filter((item) => item.available)
+            .map((item) => (
+              <button
+                type="button"
+                key={`route:${item.extensionId}:${item.contribution.id}`}
+                className={`hf-nav-button ${page === "extensions" && focusExtensionId === item.extensionId ? "active" : ""}`}
+                onClick={() => {
+                  setFocusExtensionId(item.extensionId);
+                  navigate("extensions");
+                }}
+              >
+                <span aria-hidden="true">◈</span>
+                {item.contribution.name}
+              </button>
+            ))}
           {contributions.navigation.some((item) => item.available) && (
             <p className="hf-eyebrow hf-utility-nav-title">ADMIN UTILITIES</p>
           )}
@@ -1000,6 +1024,21 @@ export function HeadfulShell() {
                           />
                           <span>Available to granted agents</span>
                         </label>
+                        <label className="hf-switch">
+                          <input
+                            type="checkbox"
+                            checked={org.remoteEnabled}
+                            disabled={isDisabled}
+                            onChange={(event) => {
+                              const remoteEnabled = event.target.checked;
+                              void action("Saving remote org access", async () => {
+                                await dispatch("orgs.update", { orgId: org.id, remoteEnabled });
+                                await refresh();
+                              });
+                            }}
+                          />
+                          <span>Allow Headful Connect grants for this org</span>
+                        </label>
                         <div className="hf-org-actions">
                           <button
                             className="hf-button hf-primary"
@@ -1239,6 +1278,7 @@ export function HeadfulShell() {
               action={action}
               onChanged={refresh}
               onSettings={() => navigate("settings")}
+              focusExtensionId={focusExtensionId}
             />
           )}
           {page === "settings" && (

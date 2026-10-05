@@ -19,7 +19,17 @@ export async function requireOrg(env: Env, principal: Principal, id: string): Pr
     | undefined;
   if (!org || (principal.orgIds && !principal.orgIds.includes(id)))
     throw new HttpError(404, "org_missing", "This org is unavailable to this client.");
-  if (principal.kind === "mcp" && !org.agent_enabled)
+  if (
+    principal.kind === "mcp" &&
+    principal.source === "connect" &&
+    env.DB.preference<unknown>(`remote:org:${id}:enabled`, false) !== true
+  )
+    throw new HttpError(
+      403,
+      "remote_org_disabled",
+      "Remote access for this org is disabled on the Mac.",
+    );
+  if (principal.kind === "mcp" && principal.source !== "connect" && !org.agent_enabled)
     throw new HttpError(403, "org_disabled", "Agent access for this org is disabled.");
   return org;
 }
