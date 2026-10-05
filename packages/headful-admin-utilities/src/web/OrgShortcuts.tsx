@@ -134,7 +134,7 @@ export function OrgShortcuts(props: UtilityComponentProps) {
   return (
     <UtilityPanel
       title="Org shortcuts"
-      description="Your selected CLI connections, clear targets, and favorite Salesforce setup destinations."
+      description="Switch your workspace target or open a Salesforce Setup page. Favorites stay with the org where you saved them."
       busy={task.busy}
       error={task.error}
       actions={
@@ -210,7 +210,7 @@ export function OrgShortcuts(props: UtilityComponentProps) {
         ))}
       </div>
       {props.orgs.length === 0 && (
-        <Empty>No selected CLI connections. Connect or import orgs from Your orgs.</Empty>
+        <Empty>No connected orgs yet. Connect or import an org from Your orgs.</Empty>
       )}
       {props.orgId && (
         <section className="hf-card">

@@ -78,7 +78,7 @@ export function HeadfulExtensions({
           result.status === "active"
             ? `${result.manifest.name} is active.`
             : result.status === "disabled"
-              ? `${result.manifest.name} is disabled. Its contributed agent capabilities are unavailable; saved Salesforce work is retained.`
+              ? `${result.manifest.name} is disabled. Its tools are unavailable; your saved Salesforce work remains.`
               : `${result.manifest.name}: ${result.status}.${result.error ? ` ${result.error.message}` : ""}`,
         );
       },
@@ -113,8 +113,8 @@ export function HeadfulExtensions({
           <div>
             <h2>Installed extensions</h2>
             <p>
-              Extend Headful with a compatible local module. Inspect what it contributes and control
-              whether it is active.
+              Enable the tools you need and inspect each extension’s settings and access
+              requirements.
             </p>
           </div>
           <button
@@ -127,11 +127,9 @@ export function HeadfulExtensions({
           </button>
         </div>
         <p className="hf-note">
-          The desktop and Salesforce services are open source. Optional modules have separate
-          licenses. The current Mac beta is free; enabling an extension does not grant org access or
-          approve a Salesforce change.
+          The Mac beta is free. Extensions may have separate licenses. Enabling one does not grant
+          org access or approve Salesforce changes.
         </p>
-        {apiVersion !== null && <span className="hf-badge">Extension API {apiVersion}</span>}
       </section>
       {notice && (
         <p className="hf-success" role="status">
@@ -142,16 +140,16 @@ export function HeadfulExtensions({
         <div className="hf-empty">
           <p>
             {busy
-              ? "Reading installed extension metadata…"
-              : "Extension metadata is unavailable. Refresh to retry."}
+              ? "Loading installed extensions…"
+              : "Could not load extensions. Choose Refresh to retry."}
           </p>
         </div>
       ) : extensions.length === 0 ? (
         <div className="hf-empty">
           <h2>No installed extensions.</h2>
           <p>
-            This build has no bundled extension available. Core org management and Salesforce
-            services remain available.
+            You can still connect orgs and use Salesforce workspace. This build has no extensions to
+            enable.
           </p>
         </div>
       ) : (
@@ -248,44 +246,48 @@ export function HeadfulExtensions({
                   <strong>{extension.error.code}</strong> · {extension.error.message}
                 </p>
               )}
-              <dl className="hf-extension-meta">
-                <div>
-                  <dt>Version</dt>
-                  <dd>{manifest.version}</dd>
-                </div>
-                <div>
-                  <dt>Package</dt>
-                  <dd>
-                    <code>{manifest.packageName}</code>
-                  </dd>
-                </div>
-                <div>
-                  <dt>Source</dt>
-                  <dd>
-                    {manifest.sourceClassification === "proprietary"
-                      ? "Proprietary integration"
-                      : "Open-source extension"}{" "}
-                    · {manifest.source === "bundled" ? "Bundled with this app" : manifest.source}
-                  </dd>
-                </div>
-                <div>
-                  <dt>License</dt>
-                  <dd>{manifest.license}</dd>
-                </div>
-                <div>
-                  <dt>Compatibility</dt>
-                  <dd>
-                    {extension.compatible ? "Compatible" : "Incompatible"} · API{" "}
-                    {manifest.apiVersion}
-                  </dd>
-                </div>
-                <div>
-                  <dt>Activation</dt>
-                  <dd>
-                    {extension.enabled ? "Enabled" : "Disabled"} · {extension.status}
-                  </dd>
-                </div>
-              </dl>
+              <details className="hf-advanced">
+                <summary>Version, license and compatibility</summary>
+                <dl className="hf-extension-meta">
+                  <div>
+                    <dt>Version</dt>
+                    <dd>{manifest.version}</dd>
+                  </div>
+                  <div>
+                    <dt>Package</dt>
+                    <dd>
+                      <code>{manifest.packageName}</code>
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Source</dt>
+                    <dd>
+                      {manifest.sourceClassification === "proprietary"
+                        ? "Proprietary integration"
+                        : "Open-source extension"}{" "}
+                      · {manifest.source === "bundled" ? "Bundled with this app" : manifest.source}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>License</dt>
+                    <dd>{manifest.license}</dd>
+                  </div>
+                  <div>
+                    <dt>Compatibility</dt>
+                    <dd>
+                      {extension.compatible ? "Compatible" : "Incompatible"} · API{" "}
+                      {manifest.apiVersion}
+                      {apiVersion !== null ? ` · App API ${apiVersion}` : ""}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Activation</dt>
+                    <dd>
+                      {extension.enabled ? "Enabled" : "Disabled"} · {extension.status}
+                    </dd>
+                  </div>
+                </dl>
+              </details>
               {extension.runtimeStatuses.map((value) => (
                 <p className="hf-note" role="status" key={value.id}>
                   {value.label} · {value.state}
@@ -365,10 +367,7 @@ export function HeadfulExtensions({
                 </section>
               )}
               <details className="hf-advanced hf-extension-details">
-                <summary>
-                  Declared contributions ·{" "}
-                  {groups.reduce((count, group) => count + group.values.length, 0)}
-                </summary>
+                <summary>Settings and capabilities</summary>
                 <div className="hf-extension-contributions">
                   {groups
                     .filter((group) => group.values.length > 0)
@@ -393,8 +392,8 @@ export function HeadfulExtensions({
                     : "No additional capabilities declared."}
                 </p>
                 <p>
-                  These declarations describe module capabilities. Your org/client grants and exact
-                  human review still govern Salesforce operations.
+                  These capabilities do not override your org and agent access grants. Salesforce
+                  writes still require your review and approval.
                 </p>
                 <h3>Dependencies</h3>
                 <p>
@@ -429,9 +428,8 @@ export function HeadfulExtensions({
         })
       )}
       <p className="hf-note">
-        This release manages modules already bundled with Headful. A marketplace and arbitrary npm
-        package installation are outside this first integration. The module license and notices ship
-        with the app.
+        This beta supports extensions bundled with the app. Installing additional extensions is not
+        yet available.
       </p>
     </>
   );

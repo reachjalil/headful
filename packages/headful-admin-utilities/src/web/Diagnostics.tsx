@@ -41,7 +41,7 @@ export function Diagnostics(props: UtilityComponentProps) {
   return (
     <UtilityPanel
       title="Org diagnostics"
-      description="Read supported Salesforce limits, storage, recent jobs, and available debug logs through the trusted CLI service."
+      description="Check this org’s limits, storage, recent Apex jobs and available debug logs. These checks are read-only; Salesforce permissions may limit the results."
       busy={task.busy}
       error={task.error}
       actions={

@@ -233,7 +233,7 @@ export function HeadfulWorkspaceShell({
             </label>
             <span className="hf-badge">{org ? orgEnvironment(org) : "No org"}</span>
             {pinned && (
-              <span className="hf-badge" title="Saved work retains its original verified org">
+              <span className="hf-badge" title="Saved work stays in its original Salesforce org">
                 Pinned
               </span>
             )}
@@ -302,7 +302,6 @@ export function HeadfulWorkspaceShell({
       >
         <div className="hf-card-heading">
           <div>
-            <p className="hf-eyebrow">YOUR WORKSPACE, YOUR WAY</p>
             <h2>Customize workspace</h2>
           </div>
           <button
@@ -316,8 +315,8 @@ export function HeadfulWorkspaceShell({
           </button>
         </div>
         <p>
-          The target org is always visible. Optional controls can be hidden or reordered without
-          changing saved work.
+          Hide or reorder optional header controls. The target org stays visible and saved work
+          stays unchanged.
         </p>
         <label className="hf-field">
           Apply preferences to

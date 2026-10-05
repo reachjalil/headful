@@ -211,7 +211,7 @@ function errorMessage(error: unknown) {
     ? "The local service returned an unsupported result. Refresh or restart Headful."
     : error instanceof Error
       ? error.message
-      : "Headful could not complete this operation.";
+      : "Headful could not complete this operation. Check its recorded status before continuing.";
 }
 function createWorkspaceService(): WorkspaceService {
   return {
@@ -715,7 +715,6 @@ export function HeadfulShell() {
     <section className="hf-card hf-cli-card">
       <div className="hf-card-heading">
         <div>
-          <p className="hf-eyebrow">YOUR ONLY REQUIRED EXTERNAL TOOL</p>
           <h2>Salesforce CLI</h2>
         </div>
         <span className={`hf-badge ${cli?.selected ? "hf-good" : ""}`}>
@@ -727,8 +726,8 @@ export function HeadfulShell() {
         </span>
       </div>
       <p>
-        Use the supported <code>sf</code> CLI, often called SFDX. Headful uses an explicit
-        executable path, including when Finder has a different PATH from your terminal.
+        Salesforce CLI connects this Mac to your orgs. Headful needs a supported <code>sf</code>{" "}
+        installation before you can connect or import an org.
       </p>
       {cli?.selected ? (
         <div className="hf-cli-selected">
@@ -740,8 +739,8 @@ export function HeadfulShell() {
         </div>
       ) : (
         <p className="hf-notice">
-          Install Salesforce’s official {cli?.architecture || "Mac"} package, then return here and
-          recheck. Headful does not install a package manager or change your shell.
+          Install Salesforce’s official {cli?.architecture || "Mac"} package, then choose Recheck
+          CLI. Headful does not install it for you.
         </p>
       )}
       {cli?.legacyDetected && (
@@ -801,7 +800,7 @@ export function HeadfulShell() {
         </button>
       </div>
       <details className="hf-advanced">
-        <summary>Choose an executable manually</summary>
+        <summary>Choose a different CLI installation</summary>
         <form
           className="hf-inline-form"
           onSubmit={(event) => {
@@ -823,7 +822,7 @@ export function HeadfulShell() {
             />
           </label>
           <button className="hf-button" disabled={isDisabled}>
-            Use path
+            Check this path
           </button>
         </form>
       </details>
@@ -910,7 +909,7 @@ export function HeadfulShell() {
           <small>
             No Headful account required.
             <br />
-            Salesforce CLI owns authentication.
+            Credentials stay on this Mac.
           </small>
           {enabled("internal-chat") && (
             <button
@@ -931,9 +930,7 @@ export function HeadfulShell() {
       <div className="hf-main">
         <header className="hf-topbar">
           <span>
-            {page === "workspace" || page === "utility"
-              ? "Explicit workspace target"
-              : "Default for new work"}
+            {page === "workspace" || page === "utility" ? "Workspace org" : "Default for new work"}
           </span>
           <div>
             {(page === "workspace" || page === "utility" ? workspaceOrg : current) ? (
@@ -1014,16 +1011,16 @@ export function HeadfulShell() {
               {status && !status.onboardingComplete && (
                 <section className="hf-onboarding">
                   <div>
-                    <p className="hf-eyebrow">WELCOME ABOARD</p>
-                    <h2>Start with a little headspace.</h2>
-                    <p>Manage Salesforce on your Mac. Bring an agent when you want one.</p>
+                    <h2>Connect your first Salesforce org</h2>
+                    <p>Set up Salesforce CLI, then connect an org or import an existing login.</p>
                   </div>
                   <div className="hf-mode-grid">
                     <article className="hf-mode selected">
-                      <span className="hf-badge">DEFAULT</span>
-                      <h3>Minimal</h3>
+                      <span className="hf-badge">START HERE</span>
+                      <h3>Salesforce setup</h3>
                       <p>
-                        Org manager, Salesforce workspace, and local MCP. No AI provider required.
+                        Manage orgs and review changes on this Mac. No AI provider or Headful
+                        account needed.
                       </p>
                       <button
                         className="hf-button hf-primary"
@@ -1034,20 +1031,20 @@ export function HeadfulShell() {
                             await dispatch("onboarding.complete", { mode: "minimal" });
                             await refresh();
                             setNotice(
-                              "Minimal is ready. Set up Salesforce CLI and choose your orgs below.",
+                              "Salesforce setup is ready. Connect an org or import an existing CLI login below.",
                             );
                           })
                         }
                       >
-                        Use Minimal
+                        Set up Salesforce
                       </button>
                     </article>
                     <article className="hf-mode">
-                      <span className="hf-badge">COMING SOON</span>
-                      <h3>Power User</h3>
+                      <span className="hf-badge">OPTIONAL</span>
+                      <h3>Connect agents later</h3>
                       <p>
-                        Broader internal agents, sessions, and orchestration. Working internal chat
-                        can be enabled experimentally in Settings.
+                        After connecting an org, use Agent connections to choose which local apps
+                        can read it or prepare changes.
                       </p>
                     </article>
                   </div>
@@ -1057,10 +1054,10 @@ export function HeadfulShell() {
               <section className="hf-card">
                 <div className="hf-card-heading">
                   <div>
-                    <h2>Your connections</h2>
+                    <h2>Connected orgs</h2>
                     <p>
-                      Choose which CLI connections belong in Headful. Import never grants agent
-                      access automatically.
+                      Open an org’s workspace or import an existing CLI login. Agent access stays
+                      off until you enable it.
                     </p>
                   </div>
                   <button
@@ -1082,10 +1079,10 @@ export function HeadfulShell() {
                 {!status?.orgs.length ? (
                   <div className="hf-empty">
                     <span aria-hidden="true">☁</span>
-                    <h3>Your next org starts here.</h3>
+                    <h3>No orgs connected yet</h3>
                     <p>
-                      Connect through Salesforce’s browser login or select existing CLI connections.
-                      Production and sandbox logins stay separate.
+                      Choose Connect an org for Salesforce’s browser login, or Import from CLI for
+                      an existing login. Each sandbox needs its own connection.
                     </p>
                   </div>
                 ) : (
@@ -1151,7 +1148,7 @@ export function HeadfulShell() {
                               })
                             }
                           />
-                          <span>Available to granted agents</span>
+                          <span>Allow access through selected agent grants</span>
                         </label>
                         <label className="hf-switch">
                           <input
@@ -1166,7 +1163,7 @@ export function HeadfulShell() {
                               });
                             }}
                           />
-                          <span>Allow Headful Connect grants for this org</span>
+                          <span>Allow paired devices through Headful Connect</span>
                         </label>
                         <div className="hf-org-actions">
                           <button
@@ -1175,7 +1172,7 @@ export function HeadfulShell() {
                             type="button"
                             onClick={() => openWorkspace(org)}
                           >
-                            Workspace
+                            Open workspace
                           </button>
                           <button
                             className="hf-button"
@@ -1211,7 +1208,7 @@ export function HeadfulShell() {
                             type="button"
                             onClick={() => setEditOrg(org)}
                           >
-                            Edit
+                            Edit display details
                           </button>
                         </div>
                         <details className="hf-advanced">
@@ -1411,8 +1408,8 @@ export function HeadfulShell() {
                   <div>
                     <h2>Extensions</h2>
                     <p>
-                      Inspect installed modules, their licenses and contributions, and enable or
-                      disable them. Headful’s core Salesforce services remain in the desktop.
+                      Enable or disable installed extensions and check their settings, licenses and
+                      access requirements.
                     </p>
                   </div>
                   <button
@@ -1427,13 +1424,12 @@ export function HeadfulShell() {
               <section className="hf-card">
                 <div className="hf-card-heading">
                   <div>
-                    <h2>Your features</h2>
+                    <h2>Enabled features</h2>
                     <p>
-                      One configuration controls the workspace, menu bar, and agent capabilities.
-                      Disabling a feature blocks its actions.
+                      Choose the tools available in Headful and to connected agents. Turning a
+                      feature off blocks its actions.
                     </p>
                   </div>
-                  <span className="hf-badge">{status?.mode || "Minimal"}</span>
                 </div>
                 <div className="hf-feature-list">
                   {status?.features.map((feature) => (
@@ -1442,12 +1438,21 @@ export function HeadfulShell() {
                         <strong>
                           {feature.name}{" "}
                           {feature.availability !== "available" && (
-                            <small className="hf-badge">{feature.availability}</small>
+                            <small className="hf-badge">
+                              {feature.availability.replaceAll("-", " ")}
+                            </small>
                           )}
                         </strong>
                         <span>{feature.description}</span>
                         {feature.dependencies.length > 0 && (
-                          <small>Requires: {feature.dependencies.join(", ")}</small>
+                          <small>
+                            Requires:{" "}
+                            {feature.dependencies
+                              .map(
+                                (id) => status?.features.find((item) => item.id === id)?.name || id,
+                              )
+                              .join(", ")}
+                          </small>
                         )}
                       </span>
                       <input
@@ -1463,7 +1468,7 @@ export function HeadfulShell() {
               </section>
               <section className="hf-card">
                 <h2>Appearance</h2>
-                <p>Keep the Headful palette in light and dark surroundings.</p>
+                <p>Use your Mac’s appearance or choose a theme.</p>
                 <div className="hf-segment" role="group" aria-label="Appearance">
                   {["system", "light", "dark"].map((value) => (
                     <button
@@ -1484,7 +1489,7 @@ export function HeadfulShell() {
                 <div className="hf-card-heading">
                   <div>
                     <h2>About Headful</h2>
-                    <p>A local-first CRM agent orchestrator, built on T3 Code.</p>
+                    <p>Salesforce tools on your Mac, built on T3 Code.</p>
                   </div>
                   <button
                     className="hf-button"
@@ -1531,9 +1536,9 @@ export function HeadfulShell() {
                   </dl>
                 )}
                 <p className="hf-note">
-                  Free Mac early access. Power User orchestration and a mobile companion are future
-                  scope. Core Salesforce credentials and CRM data are not routed through Headful
-                  servers. Selected results may reach your chosen AI provider.
+                  Free Mac beta. Salesforce credentials stay on this Mac. Data shared with a
+                  connected agent may reach its AI provider. Optional Headful Connect requires a
+                  configured relay and explicit device pairing.
                 </p>
               </section>
             </>
@@ -1551,9 +1556,7 @@ export function HeadfulShell() {
               await dispatch("orgs.login", input);
               setConnect(false);
               await refresh();
-              setNotice(
-                "Connected through Salesforce CLI. Agent access starts disabled until you choose it.",
-              );
+              setNotice("Org connected. Open its workspace to get started. Agent access is off.");
             })
           }
         />
@@ -1565,8 +1568,8 @@ export function HeadfulShell() {
           onClose={() => setDiscovered(null)}
         >
           <p>
-            Only selected connections are added. CLI keeps authentication; import verifies actual
-            org and principal identity. Agent access starts off.
+            Select the logins to add. Salesforce CLI keeps their credentials; Headful verifies each
+            org and user. Agent access starts off.
           </p>
           <div className="hf-import-list">
             {discovered.length ? (
@@ -1594,7 +1597,10 @@ export function HeadfulShell() {
                 </label>
               ))
             ) : (
-              <p>No CLI connections found. Connect an org through browser login.</p>
+              <p>
+                No CLI logins found. Close this dialog and choose Connect an org to sign in with
+                Salesforce.
+              </p>
             )}
           </div>
           <div className="hf-actions">
@@ -1611,6 +1617,9 @@ export function HeadfulShell() {
                     await dispatch("orgs.import", { username });
                   setDiscovered(null);
                   await refresh();
+                  setNotice(
+                    "Selected orgs imported. Open an org’s workspace to get started. Agent access is off.",
+                  );
                 })
               }
             >
@@ -1652,7 +1661,7 @@ export function HeadfulShell() {
           <p>
             {danger.kind === "logout"
               ? "This explicitly removes the Salesforce CLI authentication used by other tools as well as Headful’s reference. It does not undo Salesforce changes. You will need to log in again."
-              : "This removes Headful’s reference and access to the connection. Salesforce CLI remains authenticated for other tools. Saved workflow history remains, but cannot execute through a removed connection."}
+              : "This removes the connection from Headful. Other tools can still use its Salesforce CLI login. Saved work remains, but changes cannot run until the org is connected again."}
           </p>
           <div className="hf-actions">
             <button
@@ -1692,8 +1701,8 @@ export function HeadfulShell() {
           onClose={() => setSandboxes(null)}
         >
           <p>
-            Inventory is limited by Salesforce privileges. A visible sandbox is not authenticated;
-            connect it separately.
+            Salesforce returns only sandboxes you can see. Listing a sandbox does not connect it;
+            sign in to each one separately.
           </p>
           <div className="hf-import-list">
             {sandboxes.data.sandboxes.length ? (
@@ -1765,8 +1774,8 @@ function ConnectModal({
   return (
     <Modal error={error} title="Connect a Salesforce org" onClose={close}>
       <p>
-        Salesforce CLI opens Salesforce’s browser login, including SSO and MFA. Your org’s
-        authorization policy still applies.
+        Sign in through Salesforce in your browser. SSO, MFA and your org’s login policies still
+        apply. Salesforce CLI keeps the credentials on this Mac.
       </p>
       <form onSubmit={login}>
         <label className="hf-field">
@@ -1810,8 +1819,7 @@ function ConnectModal({
           />
         </label>
         <p className="hf-note">
-          Headful’s default does not change Salesforce CLI’s global default. Newly connected orgs
-          are not exposed automatically to agents.
+          Agent access starts off. Headful’s default org is separate from Salesforce CLI’s default.
         </p>
         <div className="hf-actions">
           <button className="hf-button" type="button" onClick={close} disabled={busy}>
@@ -1842,7 +1850,7 @@ function EditOrgModal({
   const [alias, setAlias] = useState(org.alias);
   const [color, setColor] = useState(org.color);
   return (
-    <Modal error={error} title="Recognize this org at a glance" onClose={close}>
+    <Modal error={error} title="Edit org display details" onClose={close}>
       <form
         onSubmit={(event) => {
           event.preventDefault();
@@ -1869,7 +1877,7 @@ function EditOrgModal({
           />
         </label>
         <label className="hf-field">
-          Helmet color
+          Org color
           <input
             className="hf-color-input"
             type="color"
@@ -1879,15 +1887,15 @@ function EditOrgModal({
           />
         </label>
         <p className="hf-note">
-          These are Headful display preferences. Verified org and principal identity remain
-          authoritative; other CLI tools keep their own aliases.
+          These labels and colors change only in Headful. The verified Salesforce org and user stay
+          the same.
         </p>
         <div className="hf-actions">
           <button className="hf-button" type="button" onClick={close}>
             Cancel
           </button>
           <button className="hf-button hf-primary" disabled={busy}>
-            Save org
+            Save display details
           </button>
         </div>
       </form>
@@ -1940,7 +1948,7 @@ function Integrations({
     setHarnesses(harnessStatusSchema.parse(await dispatch("harness.status")).clients);
   }, []);
   useEffect(() => {
-    void action("Reading local agent connections", load);
+    void action("Loading agent connections", load);
   }, [action, load]);
   const mcpEnabled = status?.features.find((feature) => feature.id === "local-mcp")?.enabled;
   return (
@@ -1948,29 +1956,29 @@ function Integrations({
       <section className="hf-card">
         <div className="hf-card-heading">
           <div>
-            <h2>Local MCP</h2>
+            <h2>Connect a local agent app</h2>
             <p>
-              The installed app owns one runtime. Clients use its packaged bridge, with locally
-              bundled interactive Apps and text fallbacks.
+              Give a local app access to selected orgs, then add Headful to its MCP configuration.
+              Salesforce credentials stay on this Mac.
             </p>
           </div>
           <span className="hf-badge">{mcpEnabled ? "Enabled" : "Disabled"}</span>
         </div>
         <p className="hf-notice">
-          Hosted ChatGPT connectors cannot reach your Mac’s loopback server directly. Use a
-          supported local desktop or CLI integration. Interactive App rendering depends on the host.
+          Hosted ChatGPT cannot connect directly to this Mac endpoint. Use a supported local app or
+          CLI below. Interactive MCP Apps also require an installed extension and a compatible host.
         </p>
       </section>
       <section className="hf-card">
-        <h2>Grant a local client access</h2>
+        <h2>Choose agent access</h2>
         <p>
-          Only enabled orgs you select are visible to this client. Read access does not approve
-          writes.
+          This connection can see only the orgs you select. Agent proposals require your separate
+          review before any Salesforce write.
         </p>
         <form
           onSubmit={(event) => {
             event.preventDefault();
-            void action("Creating local client grant", async () => {
+            void action("Creating agent access", async () => {
               const created = z.object({ grant: grantSchema }).parse(
                 await dispatch("grants.create", {
                   label,
@@ -2030,7 +2038,7 @@ function Integrations({
                 </label>
               ))
             ) : (
-              <p>Enable agent access on an org before granting it to a client.</p>
+              <p>In Your orgs, turn on agent access for the orgs you want to use here.</p>
             )}
           </div>
           <label className="hf-switch">
@@ -2041,24 +2049,23 @@ function Integrations({
               disabled={busy || !mcpEnabled}
             />
             <span>
-              Allow supported admin proposals and workflow inspection; execution still needs exact
-              human review.
+              Allow the agent to prepare admin changes. You still review and approve each write.
             </span>
           </label>
           <button className="hf-button hf-primary" disabled={busy || !mcpEnabled || !orgIds.length}>
-            Create local grant
+            Create agent access
           </button>
         </form>
       </section>
       <section className="hf-card">
-        <h2>Connect your harness</h2>
+        <h2>Add Headful to your agent app</h2>
         <p>
-          Headful preserves unrelated settings, backs up the file, and changes only its own entry.
-          Preview before installation.
+          Preview the configuration, then add the connection. Headful backs up the file and
+          preserves unrelated settings.
         </p>
         <div className="hf-two-fields">
           <label className="hf-field">
-            Harness
+            Agent app
             <select
               value={client}
               onChange={(event) => setClient(event.target.value)}
@@ -2072,7 +2079,7 @@ function Integrations({
             </select>
           </label>
           <label className="hf-field">
-            Local grant
+            Access grant
             <select
               value={selectedGrant}
               onChange={(event) => setSelectedGrant(event.target.value)}
@@ -2095,7 +2102,7 @@ function Integrations({
             disabled={busy || !selectedGrant}
             type="button"
             onClick={() =>
-              void action("Previewing harness configuration", async () => {
+              void action("Previewing agent configuration", async () => {
                 const preview = await dispatch("harness.preview", {
                   client,
                   grantId: selectedGrant,
@@ -2121,7 +2128,7 @@ function Integrations({
               })
             }
           >
-            Install connection
+            Add connection
           </button>
         </div>
         {result && <pre className="hf-bounded-json">{result}</pre>}
@@ -2141,13 +2148,13 @@ function Integrations({
                   disabled={busy}
                   type="button"
                   onClick={() =>
-                    void action("Removing harness configuration", async () => {
+                    void action("Removing agent connection", async () => {
                       await dispatch("harness.remove", { client: harness.client });
                       await load();
                     })
                   }
                 >
-                  Uninstall entry
+                  Remove connection entry
                 </button>
               </article>
             ))}
@@ -2155,7 +2162,7 @@ function Integrations({
       </section>
       <section className="hf-card">
         <div className="hf-card-heading">
-          <h2>Client grants</h2>
+          <h2>Agent access grants</h2>
           <button
             className="hf-button"
             disabled={busy}
@@ -2187,20 +2194,21 @@ function Integrations({
                   disabled={busy || Boolean(grant.revokedAt)}
                   type="button"
                   onClick={() =>
-                    void action("Revoking local grant", async () => {
+                    void action("Revoking agent access", async () => {
                       await dispatch("grants.revoke", { grantId: grant.id });
                       await load();
                     })
                   }
                 >
-                  Revoke
+                  Revoke access
                 </button>
               </article>
             ))}
           </div>
         ) : (
           <p className="hf-muted">
-            No local grants yet. Salesforce credentials never appear in the client configuration.
+            No access grants yet. Create one above to connect an agent app. Its configuration
+            contains no Salesforce credentials.
           </p>
         )}
       </section>
@@ -2256,10 +2264,10 @@ function Activity({
       <section className="hf-card">
         <div className="hf-card-heading">
           <div>
-            <h2>Saved work and confirmed progress</h2>
+            <h2>Saved workflows</h2>
             <p>
-              Continue the same durable record. Completed user creation and verified access
-              assignments stay saved after a later failure.
+              Resume a user draft or access review in its original org. Confirmed changes stay saved
+              if a later step fails.
             </p>
           </div>
           <button
@@ -2304,17 +2312,17 @@ function Activity({
                     })
                   }
                 >
-                  Continue
+                  Open saved workflow
                 </button>
               </article>
             ))}
           </div>
         ) : (
           <div className="hf-empty">
-            <h3>Your next reviewed task will appear here.</h3>
+            <h3>No saved workflows yet</h3>
             <p>
-              Open the Salesforce workspace to prepare supported changes. A model tool call is never
-              an approval.
+              Open Salesforce workspace to prepare a user draft or inspect permission sets.
+              Preparing a change does not apply it.
             </p>
           </div>
         )}
@@ -2322,8 +2330,8 @@ function Activity({
       <section className="hf-card">
         <h2>Local activity</h2>
         <p>
-          Recent connection and reviewed-operation events. Open a permission review to inspect its
-          retained outcome and provider readback.
+          Recent connection and change events. Open a permission review to check its current status
+          and Salesforce receipt.
         </p>
         {activity.length ? (
           <div className="hf-grant-list">

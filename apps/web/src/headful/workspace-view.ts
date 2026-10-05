@@ -492,12 +492,12 @@ export function mountWorkspace(
       } else if (location.view === "create-user") {
         content =
           pageTitle(
-            "Create a durable draft for one org. No user is created by opening this form.",
+            "Start a saved draft for this org. Loading the form creates no Salesforce user.",
           ) +
           empty(
             "Start a user draft",
-            "Choose the target org. Salesforce supplies available profiles, licenses, and field choices.",
-            control("Prepare user form", "prepare-user", "", true),
+            "Salesforce supplies this org’s available profiles, licenses and field choices.",
+            control("Start user draft", "prepare-user", "", true),
           );
       } else if (location.view === "user" && location.recordId) {
         access = await service.inspectUserAccess({
@@ -546,8 +546,8 @@ export function mountWorkspace(
       if (current === version) {
         error = failure instanceof Error ? failure.message : "This view is unavailable.";
         content = empty(
-          "Let’s reconnect.",
-          "Check this org’s connection and Salesforce access. Opening or refreshing a view never repeats a provider write.",
+          "This view could not load",
+          "Check the connection in Your orgs and confirm your Salesforce access, then refresh. Refreshing never repeats a write.",
           control("Refresh this view", "refresh"),
         );
       }
@@ -562,8 +562,8 @@ export function mountWorkspace(
   }
   function homePage() {
     return (
-      pageTitle("Create a user, configure access, and inspect your CRM in one focused workspace.") +
-      `<div class="hfc-w-card-grid"><section class="hfc-w-card"><span class="hfc-w-icon">♙</span><h2>Users & access</h2><p>Create a Salesforce user from provider-backed choices, then continue the same workflow to permission-set assignments.</p>${control("Create a user", "navigate", 'data-view="create-user"', true)}</section><section class="hfc-w-card"><span class="hfc-w-icon">◈</span><h2>Permission sets</h2><p>Inspect definitions and prepare exact label, description, object, or field permission edits.</p>${control("Inspect permission sets", "navigate", 'data-view="permission-sets"')}</section><section class="hfc-w-card"><span class="hfc-w-icon">▤</span><h2>Leads</h2><p>Search and inspect accessible unconverted leads. Share a selected record with the conversation.</p>${control("Browse leads", "navigate", 'data-view="leads"')}</section></div><p class="hfc-w-footnote">You choose the org. Consequential actions require an exact review and your explicit Create or Apply action.</p>`
+      pageTitle("Work in the org shown above. Choose a task to begin.") +
+      `<div class="hfc-w-card-grid"><section class="hfc-w-card"><span class="hfc-w-icon">♙</span><h2>Users & access</h2><p>Create a user with this org’s profiles and licenses, then review their permission-set assignments.</p>${control("Create a user", "navigate", 'data-view="create-user"', true)}</section><section class="hfc-w-card"><span class="hfc-w-icon">◈</span><h2>Permission sets</h2><p>Inspect a permission set or prepare a change to its details, object access or field access.</p>${control("Inspect permission sets", "navigate", 'data-view="permission-sets"')}</section><section class="hfc-w-card"><span class="hfc-w-icon">▤</span><h2>Leads</h2><p>Search unconverted leads and inspect their details. Lead tools are read-only.</p>${control("Browse leads", "navigate", 'data-view="leads"')}</section></div><p class="hfc-w-footnote">Changes reach Salesforce only after you review them and choose Create or Apply.</p>`
     );
   }
   async function workflowsPage() {
@@ -571,17 +571,17 @@ export function mountWorkspace(
     const rows = result.workflows.filter((w) => !location.orgId || w.orgId === location.orgId);
     return (
       pageTitle(
-        "Resume saved user drafts and access setup without repeating completed operations.",
+        "Resume a user draft or access review. Confirmed changes stay saved.",
         control("Create a user", "navigate", 'data-view="create-user"', true),
       ) +
       (rows.length
         ? `<ul class="hfc-w-record-list">${rows.map((w) => `<li><button type="button" data-w-action="open-workflow" data-id="${html(w.id)}"><span><strong>${w.recordId ? "User access setup" : "User creation draft"}</strong><small>${html(orgs.find((o) => o.id === w.orgId)?.label || "Authorized org")} · ${html(w.recordId || w.id)}</small></span><span>${badge(w.status)}<small>Updated ${html(timestamp(w.updatedAt))}</small></span><span aria-hidden="true">↗</span></button></li>`).join("")}</ul>`
         : empty(
-            "Your saved work will appear here.",
-            "Prepare a user draft to start. Once a user is created, the workflow continues with its exact record and access setup.",
-            control("Prepare user form", "prepare-user", "", true),
+            "No saved workflows for this org",
+            "Start a user draft. After creation, use the same workflow to configure that user’s access.",
+            control("Start user draft", "prepare-user", "", true),
           )) +
-      `<details class="hfc-w-disclosure"><summary>Inspect an existing user</summary><form data-w-form="inspect-user"><label for="hfc-w-user-id">Salesforce user ID</label><input id="hfc-w-user-id" name="userId" pattern="005[A-Za-z0-9]{12,15}" maxlength="18" required placeholder="005…"><div class="hfc-w-actions"><button class="hfc-w-button" type="submit">Inspect user</button></div><p class="hfc-w-footnote">Existing users can be inspected. This release configures permission assignments through a saved creation workflow.</p></form></details>`
+      `<details class="hfc-w-disclosure"><summary>Inspect an existing user</summary><form data-w-form="inspect-user"><label for="hfc-w-user-id">Salesforce user ID</label><input id="hfc-w-user-id" name="userId" pattern="005[A-Za-z0-9]{12,15}" maxlength="18" required placeholder="005…"><div class="hfc-w-actions"><button class="hfc-w-button" type="submit">Inspect user</button></div><p class="hfc-w-footnote">Existing users are read-only here. Assignment changes are available through a saved user-creation workflow.</p></form></details>`
     );
   }
   async function usersPage() {
@@ -596,7 +596,7 @@ export function mountWorkspace(
         ? `<ul class="hfc-w-record-list">${result.users.map((u) => `<li><button type="button" data-w-action="open-user" data-id="${html(u.Id)}"><span><strong>${html([u.FirstName, u.LastName].filter(Boolean).join(" "))}</strong><small>${html(u.Username)}</small></span><span>${badge(u.IsActive ? "active" : "inactive")}<small>${html(u.Profile.Name)}</small></span><span aria-hidden="true">↗</span></button></li>`).join("")}</ul>`
         : empty(
             "No users match.",
-            "Try another name or email. Salesforce returns a bounded set of accessible users.",
+            "Try another name or email. Results include only users your Salesforce login can read.",
           ))
     );
   }
@@ -641,15 +641,15 @@ export function mountWorkspace(
     const w = workflow;
     if (["creating", "execution_unknown"].includes(w.status))
       return (
-        pageTitle("The same saved workflow retains the submitted operation.") +
+        pageTitle("Check the saved user-creation outcome.") +
         `<section class="hfc-w-card">${badge(w.status)}<h2>${w.status === "creating" ? "User creation is in progress." : "The creation outcome is uncertain."}</h2><p>${w.status === "creating" ? "Refresh the recorded status. Do not create another user from this card." : "This workflow cannot repeat creation. Reconcile by reading Salesforce to check whether the exact user was created."}</p><div class="hfc-w-actions">${control("Refresh recorded status", "refresh")}${w.status === "execution_unknown" ? control("Reconcile from Salesforce", "reconcile-user", "", true) : ""}</div></section>`
       );
     if (userReview && w.status === "prepared" && w.digest) return userCreationReview();
     const advanced = allowedUserFields.filter((f) => !essentialFields.includes(f));
     const unsupported = w.setup.unsupportedRequiredFields;
     return (
-      pageTitle("Complete the supported fields, then review the exact user before creation.") +
-      `<form data-w-form="save-user" class="hfc-w-card hfc-w-user-form"><p class="hfc-w-boundary">${html(w.setup.org.label)} · ${w.setup.isSandbox ? "Sandbox" : "Production"} · Draft saved as workflow ${html(w.id.slice(0, 8))}</p>${unsupported.length ? `<div class="hfc-w-inline-error">This org requires unsupported User fields: ${html(unsupported.join(", "))}. Create this user directly in Salesforce.</div>` : ""}<div class="hfc-w-form-grid">${essentialFields.map(userField).join("")}</div><details class="hfc-w-disclosure" ${advanced.some((f) => w.setup.fields.find((x) => x.name === f)?.required && !w.draft[f]) ? "open" : ""}><summary>Locale and additional details</summary><p class="hfc-w-footnote">Available choices and defaults come from this org. Required settings are included in the exact creation review.</p><div class="hfc-w-form-grid">${advanced.map(userField).join("")}</div></details><div class="hfc-w-license-info" id="hfc-w-license-info">${licenseInfo()}</div>${w.status === "failed" ? '<p class="hfc-w-inline-error">Salesforce rejected the previous creation attempt. Correct and review the draft before a new attempt.</p>' : ""}<div class="hfc-w-actions"><button class="hfc-w-button hfc-w-primary" type="submit" ${unsupported.length ? "disabled" : ""}>Save draft & review</button>${control("Reload saved draft", "refresh")}</div><p class="hfc-w-footnote">Saving the draft creates no Salesforce user. The next screen shows the exact creation inputs.</p></form>`
+      pageTitle("Complete the user details, then review before creating the user in Salesforce.") +
+      `<form data-w-form="save-user" class="hfc-w-card hfc-w-user-form"><p class="hfc-w-boundary">${html(w.setup.org.label)} · ${w.setup.isSandbox ? "Sandbox" : "Production"} · Draft saved as workflow ${html(w.id.slice(0, 8))}</p>${unsupported.length ? `<div class="hfc-w-inline-error">This org requires unsupported User fields: ${html(unsupported.join(", "))}. Create this user directly in Salesforce.</div>` : ""}<div class="hfc-w-form-grid">${essentialFields.map(userField).join("")}</div><details class="hfc-w-disclosure" ${advanced.some((f) => w.setup.fields.find((x) => x.name === f)?.required && !w.draft[f]) ? "open" : ""}><summary>Locale and additional details</summary><p class="hfc-w-footnote">Choices and defaults come from this org. You will review all required settings before creation.</p><div class="hfc-w-form-grid">${advanced.map(userField).join("")}</div></details><div class="hfc-w-license-info" id="hfc-w-license-info">${licenseInfo()}</div>${w.status === "failed" ? '<p class="hfc-w-inline-error">Salesforce rejected the previous creation attempt. Correct and review the draft before a new attempt.</p>' : ""}<div class="hfc-w-actions"><button class="hfc-w-button hfc-w-primary" type="submit" ${unsupported.length ? "disabled" : ""}>Save draft & review</button>${control("Reload saved draft", "refresh")}</div><p class="hfc-w-footnote">Saving the draft creates no Salesforce user. The next screen shows the exact creation inputs.</p></form>`
     );
   }
   function licenseInfo() {
@@ -658,7 +658,7 @@ export function mountWorkspace(
     const profile = workflow.setup.profiles.find((p) => p.Id === profileId);
     const license = profile && workflow.setup.licenses.find((l) => l.Id === profile.UserLicenseId);
     return license
-      ? `<p><strong>${html(license.Name)}</strong> · ${license.UsedLicenses} of ${license.TotalLicenses} user licenses used in the current provider read · ${html(license.Status)}.</p>`
+      ? `<p><strong>${html(license.Name)}</strong> · ${license.UsedLicenses} of ${license.TotalLicenses} user licenses used when Salesforce was last read · ${html(license.Status)}.</p>`
       : "<p>Choose a profile to see its user-license context.</p>";
   }
   function draftDisplay(draft: UserWorkflow["draft"]) {
@@ -704,8 +704,8 @@ export function mountWorkspace(
   }
   function userIdentityPage(u: UserRecord) {
     return (
-      pageTitle("Read current supported Salesforce user details.") +
-      `<section class="hfc-w-card"><h2>${html([u.FirstName, u.LastName].filter(Boolean).join(" "))}</h2><dl class="hfc-w-detail-grid">${recordField("Username", u.Username)}${recordField("Email", u.Email)}${recordField("Profile", u.Profile.Name)}${recordField("Active", u.IsActive ? "Yes" : "No")}${recordField("Alias", u.Alias)}${recordField("Time zone", u.TimeZoneSidKey)}${recordField("Locale", u.LocaleSidKey)}${recordField("Language", u.LanguageLocaleKey)}</dl><h3>Current permission-set assignments</h3>${access?.assignments.length ? `<ul class="hfc-w-grant-list">${access.assignments.map((a) => `<li><span><strong>${html(a.PermissionSet.Label)}</strong><small>${html(a.PermissionSet.Name)}</small></span>${control("Inspect", "open-permission", `data-id="${html(a.PermissionSetId)}"`)}</li>`).join("")}</ul>` : '<p class="hfc-w-footnote">No assignments were returned.</p>'}<p class="hfc-w-footnote">Assignment changes in this release continue a saved user-creation workflow.</p></section>`
+      pageTitle("Inspect this user’s current Salesforce details and assignments.") +
+      `<section class="hfc-w-card"><h2>${html([u.FirstName, u.LastName].filter(Boolean).join(" "))}</h2><dl class="hfc-w-detail-grid">${recordField("Username", u.Username)}${recordField("Email", u.Email)}${recordField("Profile", u.Profile.Name)}${recordField("Active", u.IsActive ? "Yes" : "No")}${recordField("Alias", u.Alias)}${recordField("Time zone", u.TimeZoneSidKey)}${recordField("Locale", u.LocaleSidKey)}${recordField("Language", u.LanguageLocaleKey)}</dl><h3>Current permission-set assignments</h3>${access?.assignments.length ? `<ul class="hfc-w-grant-list">${access.assignments.map((a) => `<li><span><strong>${html(a.PermissionSet.Label)}</strong><small>${html(a.PermissionSet.Name)}</small></span>${control("Inspect", "open-permission", `data-id="${html(a.PermissionSetId)}"`)}</li>`).join("")}</ul>` : '<p class="hfc-w-footnote">No assignments were returned.</p>'}<p class="hfc-w-footnote">To change assignments, continue this user’s saved creation workflow.</p></section>`
     );
   }
   async function userPage() {
@@ -726,7 +726,7 @@ export function mountWorkspace(
         options.onAskAgent ? control("Ask the agent to suggest access", "ask-access") : "",
       ) +
       userAccessHeader() +
-      `<form data-w-form="prepare-access"><section class="hfc-w-card"><h2>Current permission-set assignments</h2><p class="hfc-w-footnote">Select an assignment only if you intend to remove it. Profile access stays separate.</p>${access.assignments.length ? access.assignments.map((a) => `<label class="hfc-w-assignment"><input type="checkbox" name="removeAssignmentIds" value="${html(a.Id)}" ${removeAssignmentIds.has(a.Id) ? "checked" : ""}><span><strong>${html(a.PermissionSet.Label)}</strong><small>${html(a.PermissionSet.Name)} · Remove this assignment</small></span></label>`).join("") : '<p class="hfc-w-footnote">No permission-set assignments were returned for this user.</p>'}</section><section class="hfc-w-card"><h2>Add permission sets</h2><p class="hfc-w-footnote">Compatibility follows the user’s license and permission-set requirements. Salesforce revalidates before applying.</p>${
+      `<form data-w-form="prepare-access"><section class="hfc-w-card"><h2>Current permission-set assignments</h2><p class="hfc-w-footnote">Select an assignment only if you intend to remove it. Profile access stays separate.</p>${access.assignments.length ? access.assignments.map((a) => `<label class="hfc-w-assignment"><input type="checkbox" name="removeAssignmentIds" value="${html(a.Id)}" ${removeAssignmentIds.has(a.Id) ? "checked" : ""}><span><strong>${html(a.PermissionSet.Label)}</strong><small>${html(a.PermissionSet.Name)} · Remove this assignment</small></span></label>`).join("") : '<p class="hfc-w-footnote">No permission-set assignments were returned for this user.</p>'}</section><section class="hfc-w-card"><h2>Add permission sets</h2><p class="hfc-w-footnote">Only sets compatible with this user’s license can be selected. Salesforce checks compatibility again before applying.</p>${
         access.permissionSets
           .filter((s) => !assigned.has(s.id))
           .map(
@@ -734,7 +734,7 @@ export function mountWorkspace(
               `<label class="hfc-w-assignment ${!s.compatible ? "hfc-w-unavailable" : ""}"><input type="checkbox" name="addPermissionSetIds" value="${html(s.id)}" ${addSetIds.has(s.id) ? "checked" : ""} ${!s.compatible ? "disabled" : ""}><span><strong>${html(s.label)}</strong><small>${html(s.description || s.name)}${!s.compatible ? " · " + html(s.reason || "Incompatible with this user") : ""}</small></span><button type="button" class="hfc-w-text-button" data-w-action="inspect-set" data-id="${html(s.id)}">Inspect</button></label>`,
           )
           .join("") || '<p class="hfc-w-footnote">No additional permission sets were returned.</p>'
-      }</section><div class="hfc-w-actions"><button type="submit" class="hfc-w-button hfc-w-primary">Prepare assignment review</button>${control("Reload current access", "refresh")}</div><p class="hfc-w-footnote">This prepares a proposal only. Adding and removing assignments are separate provider operations.</p></form>`
+      }</section><div class="hfc-w-actions"><button type="submit" class="hfc-w-button hfc-w-primary">Prepare assignment review</button>${control("Reload current access", "refresh")}</div><p class="hfc-w-footnote">This opens a review; it does not change access. Each addition or removal runs separately after approval.</p></form>`
     );
   }
   function userAccessHeader() {
@@ -754,7 +754,7 @@ export function mountWorkspace(
     return (
       pageTitle("Review the exact access changes for this created user.") +
       userAccessHeader() +
-      `<section class="hfc-w-card"><h2>Assignment review · revision ${w.revision}</h2><div class="hfc-w-review-grid"><section><h3>Add permission sets</h3>${p.addPermissionSetIds.length ? `<ul>${p.addPermissionSetIds.map((id) => `<li>${html(label(id))}</li>`).join("")}</ul>` : "<p>No additions.</p>"}</section><section><h3>Remove assignments</h3>${p.removeAssignmentIds.length ? `<ul>${p.removeAssignmentIds.map((id) => `<li>${html(p.before.assignments.find((a) => a.Id === id)?.PermissionSet.Label || id)}</li>`).join("")}</ul>` : "<p>No removals.</p>"}</section></div><p class="hfc-w-consequence">Applying changes updates permission-set assignments for this exact user in ${html(w.setup.org.label)}. These operations are independent; confirmed successes are retained if another operation fails.</p><div class="hfc-w-actions">${actionable ? control("Apply reviewed access changes", "apply-access", "", true) : control("Refresh operation status", "refresh", "", true)}${w.status === "execution_unknown" ? control("Reconcile assignment outcomes", "reconcile-access") : ""}${["partial", "completed"].includes(w.status) ? control("Review a corrected access proposal", "correct-access") : actionable ? control("Change selection", "change-access") : ""}</div>${!actionable ? `<p class="hfc-w-footnote">${html(w.status === "execution_unknown" ? "An assignment outcome is uncertain. Do not retry it. Check Salesforce before preparing a correction." : w.status === "partial" ? "The user remains created. Some access operations need a reviewed correction; verified operations are preserved." : w.status === "completed" ? "Salesforce verified the reviewed access operations." : "The recorded operation cannot be submitted again from this view.")}</p>` : ""}</section><section class="hfc-w-card"><h2>Recorded operations</h2><ul class="hfc-w-operation-list">${p.operations.map((op) => `<li><span><strong>${op.kind === "add" ? "Add" : "Remove"} ${html(label(op.permissionSetId))}</strong><small>${html(op.error || (op.verifiedAt ? "Verified " + timestamp(op.verifiedAt) : "Awaiting provider confirmation"))}</small></span>${badge(op.status)}</li>`).join("")}</ul></section>${
+      `<section class="hfc-w-card"><h2>Assignment review · revision ${w.revision}</h2><div class="hfc-w-review-grid"><section><h3>Add permission sets</h3>${p.addPermissionSetIds.length ? `<ul>${p.addPermissionSetIds.map((id) => `<li>${html(label(id))}</li>`).join("")}</ul>` : "<p>No additions.</p>"}</section><section><h3>Remove assignments</h3>${p.removeAssignmentIds.length ? `<ul>${p.removeAssignmentIds.map((id) => `<li>${html(p.before.assignments.find((a) => a.Id === id)?.PermissionSet.Label || id)}</li>`).join("")}</ul>` : "<p>No removals.</p>"}</section></div><p class="hfc-w-consequence">Applying changes updates permission-set assignments for this exact user in ${html(w.setup.org.label)}. These operations are independent; confirmed successes are retained if another operation fails.</p><div class="hfc-w-actions">${actionable ? control("Apply reviewed access changes", "apply-access", "", true) : control("Refresh operation status", "refresh", "", true)}${w.status === "execution_unknown" ? control("Reconcile assignment outcomes", "reconcile-access") : ""}${["partial", "completed"].includes(w.status) ? control("Review a corrected access proposal", "correct-access") : actionable ? control("Change selection", "change-access") : ""}</div>${!actionable ? `<p class="hfc-w-footnote">${html(w.status === "execution_unknown" ? "An assignment outcome is uncertain. Do not retry it. Check Salesforce before preparing a correction." : w.status === "partial" ? "The user remains created. Some access operations need a reviewed correction; verified operations are preserved." : w.status === "completed" ? "Salesforce verified the reviewed access operations." : "The recorded operation cannot be submitted again from this view.")}</p>` : ""}</section><section class="hfc-w-card"><h2>Recorded operations</h2><ul class="hfc-w-operation-list">${p.operations.map((op) => `<li><span><strong>${op.kind === "add" ? "Add" : "Remove"} ${html(label(op.permissionSetId))}</strong><small>${html(op.error || (op.verifiedAt ? "Verified " + timestamp(op.verifiedAt) : "Awaiting Salesforce confirmation"))}</small></span>${badge(op.status)}</li>`).join("")}</ul></section>${
         w.operationHistory.length
           ? `<details class="hfc-w-card hfc-w-disclosure"><summary>Earlier recorded access operations</summary><p class="hfc-w-footnote">Showing the latest ${Math.min(40, w.operationHistory.length)} of ${w.operationHistory.length} preserved operations.</p><ul class="hfc-w-operation-list">${w.operationHistory
               .slice(-40)
@@ -770,13 +770,15 @@ export function mountWorkspace(
   async function permissionListPage() {
     const result = await service.listPermissionSets({ orgId: requireOrg(), search });
     return (
-      pageTitle("Inspect definitions. Prepare exact object, field, or detail edits.") +
+      pageTitle(
+        "Find a permission set, inspect its definition and review any edits before applying.",
+      ) +
       `<form class="hfc-w-toolbar" data-w-form="search-permissions"><label class="hfc-w-sr" for="hfc-w-search">Search permission sets</label><input id="hfc-w-search" name="search" type="search" placeholder="Search label or API name" maxlength="100" value="${html(search)}"><button class="hfc-w-button" type="submit">Search</button></form><p class="hfc-w-footnote">${result.records.length} returned · up to 200 · profile-owned sets excluded.</p>` +
       (result.records.length
         ? `<ul class="hfc-w-record-list">${result.records.map((p) => `<li><button type="button" data-w-action="open-permission" data-id="${html(p.Id)}"><span><strong>${html(p.Label)}</strong><small>${html(p.Description || p.Name)}</small></span>${badge(p.IsCustom && !p.NamespacePrefix && !p.IsOwnedByProfile ? "custom" : "read_only")}<span aria-hidden="true">↗</span></button></li>`).join("")}</ul>`
         : empty(
             "No permission sets match.",
-            "Try another label or API name. Lists are bounded to the returned records.",
+            "Try another label or API name. This list shows up to 200 accessible permission sets.",
           ))
     );
   }
@@ -815,13 +817,18 @@ export function mountWorkspace(
                   }</small></span>${editable ? control("Edit", "edit-permission", `data-index="${index}"`) : badge("read_only")}</li>`,
               )
               .join("")}</ul>`
-          : empty("No grants returned.", "Add access using a supported object or field API name.")
+          : empty(
+              "No grants returned",
+              editable
+                ? "Use Add access above to prepare a change for a supported object or field API name."
+                : "This permission set is read-only. Salesforce returned no grants in this section.",
+            )
       }`;
     }
     return (
       pageTitle(p.Label) +
       back("Permission sets", "back-permissions") +
-      `<p class="hfc-w-boundary">${html(p.Name)} · ${html(p.Id)} · ${editable ? "Custom permission set" : "Provider-controlled or managed; read-only"}</p><section class="hfc-w-card"><div class="hfc-w-tabs" role="tablist" aria-label="Permission set details">${[
+      `<p class="hfc-w-boundary">${html(p.Name)} · ${html(p.Id)} · ${editable ? "Custom permission set" : "Managed or profile-owned; read-only"}</p><section class="hfc-w-card"><div class="hfc-w-tabs" role="tablist" aria-label="Permission set details">${[
         ["details", "Details"],
         ["objects", "Object access"],
         ["fields", "Field access"],
@@ -832,7 +839,7 @@ export function mountWorkspace(
         )
         .join(
           "",
-        )}</div>${body}</section><p class="hfc-w-footnote">Definition editing changes the permission set itself. User assignment is a separate access workflow. Every edit is reviewed before it reaches Salesforce.</p>`
+        )}</div>${body}</section><p class="hfc-w-footnote">Editing changes the permission set itself, not its user assignments. You review each change before it reaches Salesforce.</p>`
     );
   }
   function permissionEditor() {
@@ -898,8 +905,8 @@ export function mountWorkspace(
       (rows.length
         ? `<ul class="hfc-w-record-list hfc-w-lead-list">${rows.map((l) => `<li><button type="button" data-w-action="open-lead" data-id="${html(l.id)}"><span><strong>${html(l.name)}</strong><small>${html(l.title)} · ${html(l.company)}</small></span><span>${badge(l.status)}<small>${html(l.rating || "Rating not supplied")}</small></span><span aria-hidden="true">↗</span></button></li>`).join("")}</ul>`
         : empty(
-            "No leads match this view.",
-            "Change the status filter or search another name or company. The result is a bounded read, not a complete org export.",
+            "No matching leads",
+            "Change the status filter or search another name or company. This page shows only the returned leads, not a complete org export.",
           )) +
       pagination
     );
@@ -918,7 +925,7 @@ export function mountWorkspace(
     return (
       pageTitle(l.name) +
       back("Leads", "back-leads") +
-      `<section class="hfc-w-card"><div class="hfc-w-record-heading"><h2>${html(l.name)}</h2>${badge(l.status)}</div><p>${html(l.title)} · ${html(l.company)}</p><dl class="hfc-w-detail-grid">${recordField("Company", l.company)}${recordField("Email", l.email)}${recordField("Phone", l.phone)}${recordField("Lead source", l.source)}${recordField("Rating", l.rating)}${recordField("Created", timestamp(l.createdAt))}${recordField("Last activity", timestamp(l.lastActivityAt))}${recordField("Salesforce lead ID", l.id)}${l.description ? recordField("Description", l.description) : ""}</dl><div class="hfc-w-actions">${options.onAskAgent ? control("Bring this lead into chat", "share-lead", "", true) : ""}${compact ? control("Open in Headful workspace", "expand-workspace") : ""}${recordInspector ? control("Inspect all readable fields", "inspect-record") : ""}${control("Back to leads", "back-leads")}</div><p class="hfc-w-footnote">Read-only record context. Sharing a selection does not approve any provider action.</p></section>`
+      `<section class="hfc-w-card"><div class="hfc-w-record-heading"><h2>${html(l.name)}</h2>${badge(l.status)}</div><p>${html(l.title)} · ${html(l.company)}</p><dl class="hfc-w-detail-grid">${recordField("Company", l.company)}${recordField("Email", l.email)}${recordField("Phone", l.phone)}${recordField("Lead source", l.source)}${recordField("Rating", l.rating)}${recordField("Created", timestamp(l.createdAt))}${recordField("Last activity", timestamp(l.lastActivityAt))}${recordField("Salesforce lead ID", l.id)}${l.description ? recordField("Description", l.description) : ""}</dl><div class="hfc-w-actions">${options.onAskAgent ? control("Share lead with the agent", "share-lead", "", true) : ""}${compact ? control("Open in Headful workspace", "expand-workspace") : ""}${recordInspector ? control("Inspect all readable fields", "inspect-record") : ""}${control("Back to leads", "back-leads")}</div><p class="hfc-w-footnote">Read-only lead details.${options.onAskAgent ? " Sharing sends this record to the connected chat, where its AI provider may receive it. It does not approve a Salesforce change." : " No Salesforce changes are made from this view."}</p></section>`
     );
   }
   async function perform(operation: () => Promise<void>, mutate = false) {

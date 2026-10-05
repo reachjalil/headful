@@ -80,7 +80,7 @@ export function SchemaExplorer(props: UtilityComponentProps) {
   return (
     <UtilityPanel
       title="Objects & fields"
-      description="Browse the available object API names, describe fields and relationships, and prepare a starter query."
+      description="Find an object, inspect its fields and relationships, then open a query using the fields you select. This explorer does not change schema."
       busy={task.busy || list.busy}
       error={task.error || list.error}
     >
@@ -156,13 +156,12 @@ export function SchemaExplorer(props: UtilityComponentProps) {
                     })
                   }
                 >
-                  Query selected fields →
+                  Open query for selected fields →
                 </button>
               </div>
               <p className="hf-note">
                 {selected.length} selected · {data.queryable ? "Queryable" : "Queries unavailable"}{" "}
-                · {data.searchable ? "Searchable" : "Not searchable"} · Schema changes are outside
-                this read-only explorer.
+                · {data.searchable ? "Searchable" : "Not searchable"}
               </p>
               <div className="hf-utility-table-wrap">
                 <table className="hf-utility-table">

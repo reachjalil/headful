@@ -17,7 +17,7 @@ export function useUtilityTask() {
         setError(
           caught instanceof Error
             ? caught.message
-            : "The local service could not complete this read.",
+            : "Could not read this org. Check the connection in Your orgs, then retry the read.",
         );
     } finally {
       if (revision.current === current) setBusy(false);
@@ -50,7 +50,6 @@ export function UtilityPanel({
     <section className="hf-utility-panel" aria-busy={busy || false}>
       <div className="hf-utility-heading">
         <div>
-          <p className="hf-eyebrow">LOCAL ADMIN UTILITIES · READ ONLY</p>
           <h1>{title}</h1>
           <p>{description}</p>
         </div>

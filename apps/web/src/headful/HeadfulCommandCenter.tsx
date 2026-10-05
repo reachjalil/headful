@@ -251,7 +251,7 @@ export function HeadfulCommandCenter({
                 aria-controls="hf-global-search-results"
                 aria-autocomplete="list"
                 aria-activedescendant={results.length ? `hf-search-result-${selected}` : undefined}
-                placeholder="Pages, orgs, utilities, saved work…"
+                placeholder="Find an org, tool, page or saved workflow…"
                 value={query}
                 maxLength={200}
                 onChange={(event) => {
@@ -410,7 +410,7 @@ export function HeadfulCommandCenter({
                 <div className="hf-command-center-empty">
                   <Bell size={22} aria-hidden="true" />
                   <strong>You’re all caught up</strong>
-                  <p>Setup issues and reviewed-work updates will appear here.</p>
+                  <p>Connection issues and saved-work updates appear here.</p>
                 </div>
               )}
             </div>

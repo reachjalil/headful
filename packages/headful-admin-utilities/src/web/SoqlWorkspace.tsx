@@ -208,7 +208,7 @@ export function SoqlWorkspace(props: UtilityComponentProps) {
   return (
     <UtilityPanel
       title="SOQL workspace"
-      description="Run a bounded, read-only query against the target org. Queries and history stay with this connection on your Mac."
+      description="Query the selected org without changing records. Saved queries and query history stay on this Mac, grouped by org."
       busy={task.busy}
       error={task.error}
     >
@@ -263,7 +263,7 @@ export function SoqlWorkspace(props: UtilityComponentProps) {
               <option value={500}>500</option>
             </select>
           </label>
-          <span className="hf-note">SELECT only · No Apex or shell commands</span>
+          <span className="hf-note">Read-only SELECT queries · Up to 500 rows per page</span>
         </div>
       </form>
       <details className="hf-advanced">

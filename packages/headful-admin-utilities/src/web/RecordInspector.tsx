@@ -42,7 +42,7 @@ export function RecordInspector(props: UtilityComponentProps) {
   return (
     <UtilityPanel
       title="Record inspector"
-      description="Read accessible fields from an explicit object and record ID, including fields outside the page layout."
+      description="Inspect a record’s readable fields, including fields outside its page layout. Enter its object API name and Salesforce ID. This tool is read-only."
       busy={task.busy}
       error={task.error}
     >

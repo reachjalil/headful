@@ -1,18 +1,24 @@
 # Admin Utilities beta
 
-`@headfulcloud/admin-utilities` is an MIT-licensed public Extension included in a normal Headful build. It contributes five workspaces, commands, header controls and actions through `headful.extension.json`. It uses the public Salesforce runtime; no separate Salesforce business logic or authentication store lives in the renderer.
+Use Admin Utilities to inspect records, run read-only queries, explore fields, check org health and open Salesforce Setup shortcuts. The extension is included in Headful and available from the sidebar when enabled. Salesforce permissions still apply; these tools cannot change records or approve writes.
 
 ## Start with an explicit org
 
-Connect an org or select an existing connection in **Your orgs**. Only imported connections appear in the workspace selector. Each connection displays its verified Salesforce org and principal, environment, alias, status, and cloud color. A sandbox needs its own CLI authorization.
+In **Your orgs**, choose **Connect an org** to sign in through Salesforce, or **Import from CLI** to add an existing login. If Salesforce CLI is missing, install it and choose **Recheck CLI** first. Agent access starts off. Only orgs added to Headful appear in the workspace selector; each sandbox needs its own login.
+
+Open an org’s workspace or an Admin Utility from the sidebar. The header shows the target org, environment, verified Salesforce org ID and connected user or alias. Labels and colors help recognition; they do not change the connection’s Salesforce identity.
 
 The shared header always shows the target org. Choose another org explicitly or use **Workspace commands** (`⌘⇧K`). Switching a workspace target does not change Headful's default org. Existing reviewed workflows and permission proposals remain pinned to their saved org; open a new workspace to use another target.
 
-## Make the header yours
+## Find tools and resume work
 
 Use **Search** in the sidebar title bar (`⌘K`) to find app pages, connected orgs, available admin utilities, installed Extensions and saved user workflows. Arrow keys select a result; Enter opens it; Escape closes search and returns focus. Choosing an org opens an explicit workspace without changing the default. Saved workflows and proposals keep their original org.
 
-Open the adjacent notification bell for local CLI/connection issues, enabled Extension outages, review-ready user workflows and recent permission-change outcomes. Opening an item marks it read and navigates to its saved context. **Mark all read**, individual dismissal and **Dismiss read notifications** affect only the inbox. Read/dismissed identifiers stay in local renderer storage; CRM contents and credentials are not copied there. Updates use bounded local reads every 30 seconds while the app is visible, on focus and on manual refresh. A failed refresh keeps the last loaded history and reports the failure.
+Open the adjacent notification bell for CLI or connection issues, enabled Extension outages, user workflows ready to review and recent permission-change updates. Opening an item marks it read and opens its saved context. A permission update is recent history: open its proposal to check the current status and expiry. **Mark all read**, individual dismissal and **Dismiss read notifications** affect only the inbox, not the saved work.
+
+Read and dismissed IDs stay on this Mac; CRM contents and credentials are not copied into inbox preferences. Updates refresh every 30 seconds while the app is visible, on focus and on manual refresh. If refreshing fails, previously loaded updates remain visible with an error.
+
+## Customize the workspace header
 
 Open **Customize workspace** to hide or reorder optional controls. Save a global default or an override for the current workspace. **Reset global defaults** restores the contributed defaults; **Use global defaults** removes a workspace override. The target selector cannot be hidden. Preferences remain in the local owner-only store.
 
@@ -23,7 +29,7 @@ Enabled Extensions contribute available navigation, panels, commands, actions, a
 - **Org shortcuts** opens the selected org or supported Salesforce Setup destinations. Favorites stay with that org. These are fixed destinations, not arbitrary URLs or CLI commands.
 - **Record inspector** reads a record by object API name and Salesforce ID. The core Leads search/detail view also offers **Inspect all readable fields** while this Extension is active. Filter field labels, API names, types, and values; copy individual values, the ID, or structured JSON; open the same record in its original org. Salesforce field permissions still apply.
 - **SOQL workspace** runs one read-only `SELECT` query. Object and field suggestions come from CLI schema reads. Queries and history are saved per org; history records query text and execution metadata, without retaining result datasets. Results load in pages of at most 500 rows, with a one-row look-ahead and a 2,000-row offset bound. **Cancel query** terminates the owned CLI child. **Export this page CSV** exports only loaded rows and does not fetch additional pages.
-- **Object & field explorer** browses object API names and describes accessible fields, types, picklists, and relationships. Search field labels/API names, select fields for a starter query, and export local schema documentation. It creates or deletes no schema.
+- **Object & field explorer** browses object API names and describes accessible fields, types, picklists, and relationships. Search field labels/API names, select fields, then choose **Open query for selected fields** to open the SOQL editor. The query runs only when you choose **Run query**. You can also export local schema documentation. The explorer creates or deletes no schema.
 - **Org diagnostics** reads supported limits and storage, recent Apex jobs, and available debug logs. Missing CLI capabilities and Salesforce permissions produce useful unavailable states. It performs no job execution or log configuration.
 
 Copied values and exported files are local CRM data. You decide where to share them. Using an external agent provider separately can send selected CRM context to that provider.
