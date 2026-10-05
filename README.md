@@ -21,6 +21,8 @@ pnpm headful:setup
 pnpm headful:dev
 ```
 
+Mac packaging also compiles the retained native resource monitor. Install Rust with `rustup`; this repository pins the required 1.95.0 toolchain and its existing Cargo locks. The first native build downloads that toolchain as needed.
+
 The command starts the upstream renderer, Electron application, tray, and its bundled local runtime. It uses `.headful-dev` in the checkout; packaged builds use `~/.headful`. They never use T3 Code's live application data.
 
 ```sh
