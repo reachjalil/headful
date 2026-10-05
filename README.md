@@ -1,134 +1,48 @@
-# T3 Code
+# Headful
 
-T3 Code is an "agent harness control surface". It enables control of the agents on your machine with a best-in-class mobile app ([iOS](https://apps.apple.com/us/app/t3-code-remote-claude-more/id6787819824), [Android](https://play.google.com/store/apps/details?id=com.t3tools.t3code)), [web app](https://app.t3.codes) and [Electron-based desktop app](https://t3.codes).
+**Your local-first CRM agent orchestrator.** A free, open-source core, built first for Mac and Salesforce.
 
-Works with your subscriptions on Claude Code, Codex, Cursor, Grok Build, OpenCode, and Google Antigravity. If they're set up on your computer, T3 Code can control them.
+Headful puts your Salesforce orgs in the menu bar and gives you a focused workspace for leads, users, access, permission sets, and reviewed changes. Use its local MCP tools in your preferred supported desktop or CLI agent harness. Core desktop mode needs no Headful account.
 
-## "Wait, what are you selling me?"
+Headful is a real fork of [T3 Code](https://github.com/pingdotgg/t3code), retaining its Electron application, local server, Effect services, persistence, chat/provider foundations, shared client architecture, and mobile source. Initial Headful development, packaging, and distribution are **macOS only**. The mobile companion remains outside this release; Salesforce services are portable contracts over an authenticated local runtime, ready for a separately reviewed secure companion transport later.
 
-Nothing. We built T3 Code because we wanted the best possible development experience with agents. We were inspired by existing solutions like the Codex desktop app, Conductor, Claude Desktop and Cursor Glass, but none met our bar.
+## Early access
 
-We wanted something performant, remote-ready, and truly open. If we ever go the wrong direction, we want you to have everything you need to fork and build the editor that you want.
+Join the [waitlist](https://headful.cloud/#waitlist). This is an early testing release; there is no public stable desktop download yet. Builds made from this source are unsigned and unnotarized unless you supply your own signing configuration. The checked initial artifact targets Apple Silicon.
 
-## Installation
+[Salesforce CLI (`sf`)](https://developer.salesforce.com/tools/salesforcecli) is the only required external tool. Headful detects CLI installations and guides normal installation when missing. It imports only orgs you select, or starts the CLI's browser-based production, sandbox, or My Domain login. No connected-app client ID or secret is needed for the default desktop flow. Each sandbox requires its own authorization.
 
-> [!WARNING]
-> T3 Code currently supports Codex, Claude, Cursor, Grok Build, OpenCode, and Antigravity. Install and authenticate at least one provider before use:
->
-> - Codex: install [Codex CLI](https://developers.openai.com/codex/cli) and run `codex login`
-> - Claude: install [Claude Code](https://claude.com/product/claude-code) and run `claude auth login`
-> - Cursor: install [Cursor CLI](https://cursor.com/cli) and run `agent login`
-> - Grok Build: install [Grok Build CLI](https://x.ai/cli) and run `grok login`
-> - OpenCode: install [OpenCode](https://opencode.ai) and run `opencode auth login`
-> - Antigravity: enable it in Settings, then use **Install Antigravity** and **Sign in with Google**. No CLI is required.
+## Develop on Mac
 
-### Command line
+Use Node 24.13.1+ (Node 26 is also used for the current build) and pnpm 11.10.0. The default development build locally links the private `@headfulcloud/mcp-apps` extension from the adjacent `../headfulCloud/packages/mcp-apps` folder. Build that package first with `pnpm --dir ../headfulCloud extensions:build`. No package is fetched from npm. See [Extensions](docs/EXTENSIONS.md) for the package boundary and core-only registration.
 
-```bash
-curl -fsSL https://t3.codes/install.sh | sh
+```sh
+pnpm headful:setup
+pnpm headful:dev
 ```
 
-On Windows, in PowerShell:
+The command starts the upstream renderer, Electron application, tray, and its bundled local runtime. It uses `.headful-dev` in the checkout; packaged builds use `~/.headful`. They never use T3 Code's live application data.
 
-```powershell
-irm https://t3.codes/install.ps1 | iex
+```sh
+pnpm headful:test       # focused local Salesforce, transport, and extension lifecycle tests
+pnpm headful:check      # affected server, desktop, and web typechecks
+pnpm headful:package    # Apple Silicon .app + ZIP in artifacts/headful
 ```
 
-Then run `t3` to start the server and open the local web app. `t3 service install` keeps it running in the background, `t3 update` moves to a newer release, and `t3 --help` has the full reference.
+The installed app includes its runtime and stdio MCP bridge. End users do not need Node or a source checkout. Close the workspace window to keep the menu bar and runtime running; use **Quit Headful** to stop them. A bridge requires the app to be running and exits cleanly if it is unavailable. It never launches another workflow executor.
 
-To try it once without installing, run `npx t3@latest` instead.
+## Local authority and privacy
 
-### Desktop app
+Your Salesforce credentials and CRM records are never routed through Headful's servers in local desktop mode. Salesforce CLI owns Salesforce authentication; the local runtime obtains short-lived access for direct Salesforce requests. The renderer, embedded Apps, diagnostic output, and MCP results do not receive Salesforce credentials. There is no mandatory account, telemetry, cloud sync, relay, or upstream updater.
 
-Install the latest version of the desktop app from [GitHub Releases](https://github.com/pingdotgg/t3code/releases), or from your favorite package registry:
+Selected CRM results can be supplied to an external AI provider when you use that provider's harness. Salesforce receives Salesforce requests as normal. The website waitlist is a separate email collection service.
 
-#### Windows (`winget`)
+Client grants restrict orgs and operations and can be revoked. New imports are disabled for agent access until you enable them. Preparing a change never approves it. Consequential writes require the human's exact, expiring, single-use review in the desktop workspace. A changed org, target, revision, input or relevant provider state invalidates that approval. Unknown write outcomes require reconciliation; they are not automatically retried.
 
-```bash
-winget install T3Tools.T3Code
-```
+Use **Agent access** for supported local harness setup. A hosted ChatGPT connector cannot reach `127.0.0.1` on your Mac; use a compatible local host, or retain the separately authorized optional cloud offering. Internal T3 chat and provider sessions are experimental opt-in features, separate from Salesforce onboarding.
 
-#### macOS (Homebrew)
+## Upstream and licenses
 
-```bash
-brew install --cask t3-code
-```
+The current upstream base and version are recorded in [headful-upstream.json](headful-upstream.json). Follow [the reviewed upstream update process](docs/headful/upstream.md); `pnpm headful:upstream` detects changes and `pnpm headful:upstream prepare <ref>` prepares an integration branch. Neither merges nor publishes automatically. Headful release tags use `headful-v*`; preserved upstream release/mobile/relay jobs are guarded against running in this fork.
 
-#### Debian, Ubuntu (`.deb`)
-
-Download the `.deb` from [GitHub Releases](https://github.com/pingdotgg/t3code/releases), then:
-
-```bash
-sudo apt install ./T3-Code-*.deb
-```
-
-#### Arch Linux (AUR)
-
-Stable:
-
-```bash
-yay -S t3code-bin
-```
-
-Nightly:
-
-```bash
-yay -S t3code-nightly-bin
-```
-
-The AUR packaging is maintained in this repository under [`packaging/aur`](./packaging/aur).
-
-## Some notes
-
-We are very very early in this project. Expect bugs.
-
-We are (mostly) not accepting contributions yet. Small fixes may be considered. Big features will not be.
-
-## Documentation
-
-Full docs live in [docs/](./docs). There's no docs site yet.
-
-- [Install and first run](./docs/user/install.md)
-- [Permission modes](./docs/user/permission-modes.md)
-- [Keyboard shortcuts](./docs/user/keybindings.md)
-- [Project settings](./docs/user/project-settings.md)
-- [Appearance preferences](./docs/user/appearance.md)
-- [Remote access from a phone or another machine](./docs/user/remote-access.md)
-- [Keeping app and server in sync](./docs/user/updating.md)
-- [Source control integrations](./docs/user/source-control.md)
-- Multiple accounts: [Codex](./docs/user/providers-codex.md) · [Claude](./docs/user/providers-claude.md)
-- [Run T3 Code as a background service](./docs/user/background-service.md)
-
-Building from source? Start at [docs/internals/overview.md](./docs/internals/overview.md).
-
-## If you REALLY want to contribute still.... read this first
-
-### Install `vp`
-
-T3 Code uses Vite+ so you'll need to install the global `vp` command-line tool.
-
-#### macOS / Linux
-
-```bash
-curl -fsSL https://vite.plus | bash
-```
-
-#### Windows
-
-```bash
-irm https://vite.plus/ps1 | iex
-```
-
-Checkout their getting started guide for more information: https://viteplus.dev/guide/
-
-### Install dependencies
-
-```bash
-vp i
-```
-
-Read [CONTRIBUTING.md](./CONTRIBUTING.md) before reporting a bug or opening a PR.
-
-Have a feature request? Start an [Ideas discussion](https://github.com/pingdotgg/t3code/discussions/categories/ideas).
-
-Need support? Join the [Discord](https://discord.gg/jn4EGJjrvv).
+T3 Code's MIT license and attribution are preserved. Original public Headful additions are MIT. The locally linked MCP Apps extension is proprietary compiled code, with its own license and third-party notices; its source belongs in the private Headful Cloud repository. Adapted Headful Cloud workspace and Salesforce workflow modules retain Apache-2.0; see LICENSES/Headful-Cloud-Apache-2.0.txt. Included third-party components retain their licenses. [Source adaptation and notices](docs/headful/architecture.md) distinguish public product code from private coordination. Vorssaint was a menu-bar UX reference only: no GPL source or assets were copied.

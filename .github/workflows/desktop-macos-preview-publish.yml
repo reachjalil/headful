@@ -29,8 +29,9 @@ permissions:
 
 jobs:
   resolve:
+    if: ${{ github.repository == 'pingdotgg/t3code' }}
     name: Verify preview eligibility
-    if: >-
+    if: ${{ github.repository == 'pingdotgg/t3code' && (>-) }}
       github.event_name == 'workflow_run' &&
       github.event.workflow_run.event == 'pull_request' &&
       github.event.workflow_run.conclusion == 'success'
@@ -278,9 +279,10 @@ jobs:
           retention-days: 1
 
   build:
+    if: ${{ github.repository == 'pingdotgg/t3code' }}
     name: Package and sign macOS arm64 preview
     needs: resolve
-    if: needs.resolve.outputs.eligible == 'true'
+    if: ${{ github.repository == 'pingdotgg/t3code' && (needs.resolve.outputs.eligible == 'true') }}
     concurrency:
       group: desktop-macos-preview-${{ needs.resolve.outputs.pr_number }}-build
       cancel-in-progress: true
@@ -319,9 +321,10 @@ jobs:
   # "desktop-preview" (release.yml only matches v*.*.* tags), so publishing a
   # build never notifies release watchers.
   publish:
+    if: ${{ github.repository == 'pingdotgg/t3code' }}
     name: Publish anonymous download
     needs: [resolve, build]
-    if: needs.resolve.outputs.eligible == 'true' && needs.build.result == 'success'
+    if: ${{ github.repository == 'pingdotgg/t3code' && (needs.resolve.outputs.eligible == 'true' && needs.build.result == 'success') }}
     runs-on: blacksmith-8vcpu-ubuntu-2404
     timeout-minutes: 10
     # Its own group, so a publish never cancels a newer commit's signing job
@@ -489,13 +492,14 @@ jobs:
             }
 
   cleanup:
+    if: ${{ github.repository == 'pingdotgg/t3code' }}
     name: Remove preview download
     # A published preview no longer carries the label (resolve consumed it),
     # so every close must look for assets; the -pr.N. filter below makes
     # that a cheap no-op for PRs that never had one. A manual unlabel before
     # the build consumed it withdraws the request and drops any older
     # download too.
-    if: >-
+    if: ${{ github.repository == 'pingdotgg/t3code' && (>-) }}
       github.event_name == 'pull_request_target' &&
       (github.event.action == 'closed' ||
       (github.event.action == 'unlabeled' && github.event.label.name == 'preview:mac'))

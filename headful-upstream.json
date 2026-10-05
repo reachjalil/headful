@@ -1,0 +1,10 @@
+{
+  "repository": "https://github.com/pingdotgg/t3code",
+  "version": "0.0.45",
+  "release": "v0.0.45",
+  "commit": "efecd3cf8bcec3d1891b5f5a27dc2f6d797c6448",
+  "headfulVersion": "0.1.0",
+  "headfulProtocolVersion": 1,
+  "releaseTagPrefix": "headful-v",
+  "mobile": "Preserved upstream source; no initial mobile development or distribution"
+}

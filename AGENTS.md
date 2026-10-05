@@ -1,3 +1,13 @@
+# Headful fork instructions
+
+Headful is a local-first Salesforce orchestrator on the complete T3 Code foundation. Initial development and packaging are Mac-only. Preserve apps/mobile and shared client architecture; a future secure mobile companion is outside initial scope. Keep upstream history, license, portable contracts and minimal integration seams. Never read-write T3 live state. Headful state uses its own data/profile/protocol identities. Public source contains no private planning, cloud secrets or production CRM data.
+
+Use scoped Headful commands and focused tests. Core onboarding needs Salesforce CLI only; provider chat is optional. All Salesforce operations use explicit verified org/principal identity and one local service. The renderer cannot use CLI, provider APIs, filesystem or credentials directly. Feature/client/org authorization is enforced by services. Models can prepare changes but cannot mint approvals or execute writes. Preserve exact review, single-use claims, stale checks, receipts and unknown-outcome reconciliation. Current local transport binds loopback; future mobile access needs separately reviewed authenticated pairing.
+
+The user explicitly authorizes parallel agents, browser/app inspection needed for focused verification, Mac packaging, committing/pushing this fork and updating the separately maintained Headful website. Do not modify HelloMCP or message unrelated tasks.
+
+The following retained upstream instructions guide architecture where applicable. Headful's product scope above takes precedence.
+
 # T3 Code
 
 T3 Code is a minimal GUI for coding agents. A Node WebSocket server wraps provider CLIs and agents (Codex, Claude Code, Cursor, Grok, OpenCode, Antigravity) and serves web, desktop, and mobile clients.

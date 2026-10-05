@@ -26,6 +26,8 @@
  * enforced by a test, not by inspection.
  */
 export const CLI_RUNTIME_EXTERNAL_PREFIXES = [
+  // Compiled Headful extensions retain their separate package and license boundary.
+  "@headfulcloud/",
   // Cursor ships computed Webpack imports and platform helper packages.
   "@cursor/sdk",
   "node-pty",

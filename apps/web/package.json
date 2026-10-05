@@ -1,6 +1,6 @@
 {
   "name": "@t3tools/web",
-  "version": "0.0.45",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -60,6 +60,7 @@
     "remark-breaks": "^4.0.0",
     "remark-gfm": "^4.0.1",
     "tailwind-merge": "^3.4.0",
+    "zod": "4.4.3",
     "zustand": "^5.0.11"
   },
   "devDependencies": {

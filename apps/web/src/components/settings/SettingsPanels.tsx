@@ -1,4 +1,5 @@
 import { SettingsGroup } from "./SettingsGroup";
+import { APP_BASE_NAME } from "../../branding";
 import { Spinner } from "~/components/ui/spinner";
 import { NotificationSettings } from "./NotificationSettings";
 import { ArchiveIcon, ArchiveX, CheckIcon, ChevronRightIcon, SettingsIcon } from "lucide-react";
@@ -3365,7 +3366,7 @@ export function GeneralSettingsPanel() {
         />
         <SettingsRow
           {...searchableSetting("open-source-licenses")}
-          description="Notices for dependencies, assets, and optional tools used by T3 Code."
+          description={`Notices for dependencies, assets, and optional tools used by ${APP_BASE_NAME}, including T3 Code upstream.`}
           control={
             <Button
               render={<Link to="/settings/open-source-licenses" />}

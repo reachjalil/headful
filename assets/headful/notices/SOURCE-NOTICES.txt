@@ -1,0 +1,5 @@
+Headful is based on T3 Code, Copyright 2026 T3 Tools Inc., MIT.
+Headful desktop additions Copyright 2026 Headful contributors, MIT.
+Salesforce workspace, schemas, workflow algorithms and helmet assets adapted from Headful Cloud, Apache-2.0. Modifications replace cloud authentication/persistence with a local CLI-owned runtime.
+Vorssaint was a UX reference only. No GPL source/assets were copied.
+Dependency notices are also included by the upstream packaging pipeline.

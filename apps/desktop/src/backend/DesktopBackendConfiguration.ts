@@ -1,4 +1,5 @@
 import * as NodeOS from "node:os";
+import { desktopCapability } from "../headful/DesktopCapability.ts";
 
 import { parsePersistedServerObservabilitySettings } from "@t3tools/shared/serverSettings";
 import * as Context from "effect/Context";
@@ -582,6 +583,13 @@ const resolvePrimaryStartConfig = Effect.fn("desktop.backendConfiguration.resolv
       entryPath: environment.backendEntryPath,
       cwd: environment.backendCwd,
       env: {
+        HEADFUL_DESKTOP_CAPABILITY: desktopCapability,
+        HEADFUL_MCP_BRIDGE: environment.isPackaged
+          ? environment.path.join(environment.resourcesPath, "headful-mcp.mjs")
+          : (process.env.HEADFUL_MCP_BRIDGE ?? ""),
+        HEADFUL_MCP_ASSETS: environment.isPackaged
+          ? environment.path.join(environment.resourcesPath, "headful", "mcp-app")
+          : (process.env.HEADFUL_MCP_ASSETS ?? ""),
         ...backendChildEnvPatch(),
         ELECTRON_RUN_AS_NODE: "1",
       },

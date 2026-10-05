@@ -408,3 +408,26 @@ contextBridge.exposeInMainWorld("desktopBridge", {
     },
   },
 } satisfies DesktopBridge);
+
+// Narrow local application bridge. No filesystem, executable, provider token or
+// unrestricted shell is exposed to renderer code.
+contextBridge.exposeInMainWorld("headfulBridge", {
+  dispatch: (operation: string, input: unknown = {}) =>
+    ipcRenderer.invoke("headful:dispatch", operation, input),
+  open: (route: string) => ipcRenderer.send("headful:open", route),
+  onNavigate: (listener: (route: string) => void) => {
+    const handler = (_event: unknown, route: string) => listener(route);
+    ipcRenderer.on("headful:navigate", handler);
+    let active = true;
+    void ipcRenderer
+      .invoke("headful:routeReady")
+      .then((route: unknown) => {
+        if (active && typeof route === "string") listener(route);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+      ipcRenderer.removeListener("headful:navigate", handler);
+    };
+  },
+});

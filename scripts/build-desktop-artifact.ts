@@ -4,6 +4,7 @@
 import * as NodeFSP from "node:fs/promises";
 import * as NodeCrypto from "node:crypto";
 import * as NodeModule from "node:module";
+import { pathToFileURL } from "node:url";
 
 import {
   createPackageWithOptions,
@@ -34,6 +35,7 @@ import {
   selectCliRuntimeExternalDependencies,
 } from "./lib/cli-external-packages.ts";
 import { loadRepoEnv } from "./lib/public-config.ts";
+import { resolveHeadfulExtensionPackage } from "./lib/headful-extension-package.ts";
 import { selectDesktopRuntimeExternalDependencies } from "./lib/desktop-external-packages.ts";
 import { resolveCatalogDependencies } from "./lib/resolve-catalog.ts";
 
@@ -54,7 +56,7 @@ import { Command, Flag } from "effect/unstable/cli";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 
 const LINUX_ICON_SIZES = [16, 22, 24, 32, 48, 64, 128, 256, 512] as const;
-const DESKTOP_APP_ID = "com.t3tools.t3code";
+const DESKTOP_APP_ID = "cloud.headful.mac";
 const APPLE_TEAM_ID_PATTERN = /^[A-Z0-9]{10}$/u;
 
 const BuildPlatform = Schema.Literals(["mac", "linux", "win"]);
@@ -947,7 +949,7 @@ export const DESKTOP_FILE_EXCLUSIONS = [
   "!**/node_modules/@cursor/sdk-*/**/*",
   "!apps/desktop/prod-resources/cursor-sdk",
   "!apps/desktop/prod-resources/cursor-sdk/**/*",
-  // T3 Code always passes the user's installed Claude executable to the SDK,
+  // Headful always passes the user's installed Claude executable to the SDK,
   // so the SDK's optional platform packages (each a ~200MB bundled executable)
   // are dead weight. The trailing dash keeps the SDK's own JS package.
   "!**/node_modules/@anthropic-ai/claude-agent-sdk-*/**/*",
@@ -2644,8 +2646,8 @@ export function resolvePackageManagerUserAgent(packageManager: string): string {
 
 export function resolveDesktopProductName(version: string): string {
   return resolveDesktopUpdateChannel(version) === "nightly"
-    ? "T3 Code (Nightly)"
-    : (desktopPackageJson.productName ?? "T3 Code");
+    ? "Headful (Nightly)"
+    : (desktopPackageJson.productName ?? "Headful");
 }
 
 export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
@@ -2670,7 +2672,7 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
   const buildConfig: Record<string, unknown> = {
     appId: DESKTOP_APP_ID,
     productName: resolveDesktopProductName(version),
-    artifactName: "T3-Code-${version}-${arch}.${ext}",
+    artifactName: "Headful-${version}-${arch}.${ext}",
     electronLanguages: [...DESKTOP_ELECTRON_LANGUAGES],
     files: [
       ...DESKTOP_FILE_EXCLUSIONS,
@@ -2691,6 +2693,8 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
       : {}),
     extraResources: [
       ...DESKTOP_EXTRA_RESOURCES,
+      { from: "apps/desktop/prod-resources/headful", to: "headful" },
+      { from: "apps/desktop/prod-resources/headful-mcp.mjs", to: "headful-mcp.mjs" },
       ...(platform === "linux" ? LINUX_CAPTURE_EXTRA_RESOURCES : []),
       ...(platform === "linux" ? LINUX_BROWSER_SECRET_EXTRA_RESOURCES : []),
       ...(platform === "win" ? WINDOWS_SERVER_EXTRA_RESOURCES : []),
@@ -2698,7 +2702,7 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
     ],
   };
   const updateChannel = resolveDesktopUpdateChannel(version);
-  if (!isDesktopPreviewVersion(version)) {
+  if (false && !isDesktopPreviewVersion(version)) {
     const publishConfig = yield* resolveGitHubPublishConfig(updateChannel);
     if (publishConfig) {
       buildConfig.publish = [publishConfig];
@@ -2721,12 +2725,12 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
       category: "public.app-category.developer-tools",
       extendInfo: {
         NSScreenCaptureUsageDescription:
-          "T3 Code captures the active window when you use the window capture shortcut.",
+          "Headful captures the active window when you use the window capture shortcut.",
       },
       protocols: [
         {
-          name: "T3 Code",
-          schemes: ["t3code", "t3code-dev"],
+          name: "Headful",
+          schemes: ["headful", "headful-dev"],
         },
       ],
       ...(signed ? { sign: path.join(repoRoot, "scripts/sign-macos.ts") } : {}),
@@ -2779,8 +2783,8 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
       // t3code:// OAuth callbacks to the app.
       protocols: [
         {
-          name: "T3 Code",
-          schemes: ["t3code", "t3code-dev"],
+          name: "Headful",
+          schemes: ["headful", "headful-dev"],
         },
       ],
       desktop: {
@@ -3453,7 +3457,10 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
   });
 
   const appVersion = options.version ?? serverPackageJson.version;
-  const iconAssets = resolveDesktopBuildIconAssets(appVersion);
+  const iconAssets = {
+    ...resolveDesktopBuildIconAssets(appVersion),
+    macIconPng: "assets/headful/icon-1024.png",
+  };
   const commitHash = yield* resolveGitCommitHash(repoRoot);
   const mkdir = options.keepStage ? fs.makeTempDirectory : fs.makeTempDirectoryScoped;
   const stageRoot = yield* mkdir({
@@ -3639,7 +3646,32 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
 
   // electron-builder is filtering out stageResourcesDir directory in the AppImage for production
   const stageProdResourcesDir = path.join(stageAppDir, "apps/desktop/prod-resources");
+  const integration = yield* Effect.try(() => resolveHeadfulExtensionPackage(repoRoot));
+  const integrationAssets = yield* Effect.tryPromise(async () => {
+    const { getMcpAppsAssets } = await import(pathToFileURL(integration.entry).href);
+    return getMcpAppsAssets();
+  });
   yield* fs.copy(stageResourcesDir, stageProdResourcesDir);
+  yield* fs.copy(
+    path.join(repoRoot, "assets/headful"),
+    path.join(stageProdResourcesDir, "headful"),
+  );
+  yield* fs.copy(
+    integrationAssets.bridgeScript,
+    path.join(stageProdResourcesDir, "headful-mcp.mjs"),
+  );
+  yield* fs.copy(
+    integrationAssets.assetsDirectory,
+    path.join(stageProdResourcesDir, "headful/mcp-app"),
+  );
+  yield* fs.copy(
+    integrationAssets.pluginArchive,
+    path.join(stageProdResourcesDir, "headful/headful-plugin.zip"),
+  );
+  yield* fs.copy(
+    path.join(repoRoot, "LICENSE"),
+    path.join(stageProdResourcesDir, "HEADFUL-LICENSE.txt"),
+  );
 
   const configuredMacPasskeySigning =
     options.platform === "mac" && options.signed
@@ -3683,6 +3715,45 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
           arch: options.arch,
           fffNodeVersion: serverPackageJson.dependencies["@ff-labs/fff-node"],
         });
+  // A development link must never escape into the distributable. Stage an
+  // audited self-contained compiled package and install that local snapshot.
+  const extensionStage = path.join(stageAppDir, "vendor/headfulcloud-mcp-apps");
+  yield* Effect.tryPromise(async () => {
+    await NodeFSP.mkdir(extensionStage, { recursive: true });
+    await NodeFSP.cp(path.join(integration.directory, "dist"), path.join(extensionStage, "dist"), {
+      recursive: true,
+    });
+    for (const name of [
+      "LICENSE",
+      "NOTICE",
+      "LICENSES",
+      "headful.extension.json",
+      "THIRD_PARTY_NOTICES.md",
+      "README.md",
+    ]) {
+      if (
+        await NodeFSP.stat(path.join(integration.directory, name)).then(
+          () => true,
+          () => false,
+        )
+      )
+        await NodeFSP.cp(path.join(integration.directory, name), path.join(extensionStage, name), {
+          recursive: true,
+        });
+    }
+    const {
+      scripts: _scripts,
+      devDependencies: _devDependencies,
+      peerDependencies: _peers,
+      peerDependenciesMeta: _peerMeta,
+      ...compiledManifest
+    } = integration.manifest;
+    await NodeFSP.writeFile(
+      path.join(extensionStage, "package.json"),
+      JSON.stringify(compiledManifest, null, 2) + "\n",
+    );
+  });
+  stageDependencies["@headfulcloud/mcp-apps"] = "file:./vendor/headfulcloud-mcp-apps";
   const stagePatchedDependencies = createStagePatchedDependencies(
     workspacePatchedDependencies,
     stageDependencies,
@@ -3692,16 +3763,16 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
       ? path.join(stageAppDir, WINDOWS_SERVER_RESOURCE_SOURCE_DIR, WINDOWS_SERVER_ASAR_RESOURCE)
       : undefined;
   const stagePackageJson: StagePackageJson = {
-    name: "t3code",
+    name: "headful",
     version: appVersion,
     buildVersion: appVersion,
     t3codeCommitHash: commitHash,
     private: true,
     packageManager: rootPackageJson.packageManager,
-    description: "T3 Code desktop build",
+    description: "Headful desktop build",
     // Required by the .deb control file.
-    homepage: "https://t3.codes",
-    author: "T3 Tools",
+    homepage: "https://headful.cloud",
+    author: "Headful contributors (based on T3 Tools)",
     main: "apps/desktop/dist-electron/boot.cjs",
     build: yield* createBuildConfig(
       options.platform,
@@ -3986,7 +4057,7 @@ const buildDesktopArtifactCli = Command.make("build-desktop-artifact", {
     Flag.optional,
   ),
 }).pipe(
-  Command.withDescription("Build a desktop artifact for T3 Code."),
+  Command.withDescription("Build a desktop artifact for Headful."),
   Command.withHandler((input) => Effect.flatMap(resolveBuildOptions(input), buildDesktopArtifact)),
 );
 

@@ -1,3 +1,4 @@
+import * as HeadfulRuntimeHost from "./headful/RuntimeHost.ts";
 import type { RelayManagedEndpointRuntimeConfig } from "@t3tools/contracts/relay";
 import * as Clock from "effect/Clock";
 import * as Random from "effect/Random";
@@ -1012,6 +1013,7 @@ const makeServerLayer = Layer.unwrap(
       routerConfig: HTTP_ROUTER_CONFIG,
     }).pipe(Layer.tap(() => Deferred.succeed(routesReady, undefined).pipe(Effect.orDie)));
     const serverApplicationLayer = Layer.mergeAll(
+      HeadfulRuntimeHost.layer,
       routesLayer,
       httpListeningLayer,
       runtimeStateLayer.pipe(Layer.provide(launcherLayer)),

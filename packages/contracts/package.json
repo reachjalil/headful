@@ -18,6 +18,18 @@
     "./relay": {
       "types": "./src/relay.ts",
       "import": "./src/relay.ts"
+    },
+    "./headful": {
+      "types": "./src/headful.ts",
+      "import": "./src/headful.ts"
+    },
+    "./headful-extensions": {
+      "types": "./src/headful-extensions.ts",
+      "import": "./src/headful-extensions.ts"
+    },
+    "./headful-workspace/*": {
+      "types": "./src/headful-workspace/*.ts",
+      "import": "./src/headful-workspace/*.ts"
     }
   },
   "scripts": {
@@ -25,7 +37,8 @@
     "test": "vp test run --config ../../vite.config.ts --dir ."
   },
   "dependencies": {
-    "effect": "catalog:"
+    "effect": "catalog:",
+    "zod": "4.4.3"
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",

@@ -29,12 +29,14 @@ export const applyWebBrandAssets = Effect.fn("applyWebBrandAssets")(function* (
   const repoRoot = yield* path.fromFileUrl(new URL("..", import.meta.url));
 
   yield* Effect.forEach(
-    resolveWebIconOverrides(brand, targetDirectory),
-    (override) =>
-      fs.copyFile(
-        path.join(repoRoot, override.sourceRelativePath),
-        path.join(repoRoot, override.targetRelativePath),
-      ),
+    [
+      ["assets/headful/icon-16.png", "favicon-16x16.png"],
+      ["assets/headful/icon-32.png", "favicon-32x32.png"],
+      ["assets/headful/icon-180.png", "apple-touch-icon.png"],
+      ["assets/headful/helmet.svg", "favicon.svg"],
+    ],
+    ([source, target]) =>
+      fs.copyFile(path.join(repoRoot, source!), path.join(repoRoot, targetDirectory, target!)),
     { concurrency: "unbounded" },
   );
 });

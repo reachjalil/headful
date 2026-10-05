@@ -5,6 +5,9 @@ import { PreviewAutomationHosts } from "./components/preview/PreviewAutomationHo
 import { QuitHoldOverlay } from "./components/QuitHoldOverlay";
 import { AppAtomRegistryProvider } from "./rpc/atomRegistry";
 import type { AppRouter } from "./router";
+import { isElectron } from "./env";
+import { HeadfulChatContext } from "./headful/HeadfulChatContext";
+import { HeadfulThemeAdapter } from "./headful/HeadfulThemeAdapter";
 
 /**
  * Owns renderer-wide providers. The Electron browser host intentionally sits
@@ -12,9 +15,21 @@ import type { AppRouter } from "./router";
  * share the same atom registry as routed UI.
  */
 export function AppRoot({ router }: { readonly router: AppRouter }) {
+  const headfulChat =
+    isElectron && new URL(window.location.href).searchParams.get("headfulChat") === "1";
   return (
     <AppAtomRegistryProvider>
-      <RouterProvider router={router} />
+      {headfulChat ? (
+        <div className="headful-chat">
+          <HeadfulThemeAdapter />
+          <HeadfulChatContext router={router} />
+          <div className="hf-chat-route">
+            <RouterProvider router={router} />
+          </div>
+        </div>
+      ) : (
+        <RouterProvider router={router} />
+      )}
       <PreviewAutomationHosts />
       <ElectronBrowserHost />
       <QuitHoldOverlay />

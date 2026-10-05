@@ -1,3 +1,6 @@
+# Mac-focused installs intentionally omit mobile/relay dependencies. Do not auto-install every workspace on run.
+verifyDepsBeforeRun: false
+
 packages:
   - apps/*
   - infra/*
@@ -278,6 +281,6 @@ publicHoistPattern:
   - "@cursor/sdk-*"
 
 supportedArchitectures:
-  cpu: [current, x64]
-  libc: [current, glibc]
-  os: [current, linux]
+  cpu: [current]
+  libc: [current]
+  os: [current]

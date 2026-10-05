@@ -45,3 +45,10 @@ node_modules/
 
 # pnpm content-addressable store; never belongs in the repo.
 .pnpm-store/
+
+# Headful local state and private early-access artifacts
+.headful-dev/
+.headful/
+artifacts/headful/
+
+assets/headful/mcp-app/

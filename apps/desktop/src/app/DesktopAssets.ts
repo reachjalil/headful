@@ -87,7 +87,7 @@ function resolveSourceTreeIconPath(
       : environment.platform === "darwin"
         ? fileNames.macPng
         : fileNames.universalPng;
-  return environment.path.join(environment.rootDir, "assets", brand, fileName);
+  return environment.path.join(environment.rootDir, "assets", "headful", "icon-1024.png");
 }
 
 const resolveIconPath = Effect.fn("desktop.assets.resolveIconPath")(function* (

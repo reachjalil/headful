@@ -33,6 +33,9 @@
     "test",
     "scripts/warm-dep-cache.ts",
     "../../scripts/lib/public-config.ts",
-    "../../scripts/lib/third-party-licenses.ts"
+    "../../scripts/lib/third-party-licenses.ts",
+    "../../packages/contracts/src/headful.ts",
+    "../../packages/contracts/src/headful-extensions.ts",
+    "../../packages/contracts/src/headful-workspace/**/*.ts"
   ]
 }

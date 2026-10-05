@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-labelledby="logo-title" style="color:#fff"><title id="logo-title">Headful Cloud helmet and star</title><g id="helmet-shell" fill="currentColor">
+  <rect id="ear-left" x="56" y="226" width="54" height="108" rx="28"/>
+  <rect id="ear-right" x="402" y="226" width="54" height="108" rx="28"/>
+  <path fill-rule="evenodd" d="M256 88C352 88 422 150 427 238V294C427 364 390 408 318 408H194C122 408 85 364 85 294V238C90 150 160 88 256 88ZM200 174C151 174 122 204 122 250V294C122 338 151 365 200 365H312C361 365 390 338 390 294V250C390 204 361 174 312 174H200Z"/>
+</g>
+<path id="visor-star" fill="currentColor" d="M330 238C333 256 342 265 360 268C342 271 333 280 330 298C327 280 318 271 300 268C318 265 327 256 330 238Z"/></svg>

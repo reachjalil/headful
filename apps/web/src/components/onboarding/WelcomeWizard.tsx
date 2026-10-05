@@ -34,6 +34,8 @@ import { Check, Copy } from "lucide";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { TYPOGRAPHY_ADVANCED_STORAGE_KEY } from "../../appearanceFonts";
+import { APP_BASE_NAME } from "../../branding";
+import headfulHelmet from "../../headful/helmet.svg";
 import { useLocalStorage } from "../../hooks/useLocalStorage";
 import { hasCloudPublicConfig } from "../../cloud/publicConfig";
 import { useT3ConnectAuthPrompt } from "../clerk/useT3ConnectAuthPrompt";
@@ -219,13 +221,27 @@ export function WelcomeWizard({
         initialFocus={() => document.getElementById("onboarding-pairing-url") ?? true}
       >
         <WizardHeader
-          title="Set up T3 Code"
+          title={`Set up ${APP_BASE_NAME} chat`}
           identity={
-            <div className="flex items-baseline gap-1.5" role="img" aria-label="T3 Code">
-              <T3Wordmark className="h-4 w-auto shrink-0" aria-hidden />
-              <span className="text-2xl font-medium tracking-tight text-muted-foreground">
-                Code
-              </span>
+            <div className="flex items-center gap-2" role="img" aria-label={APP_BASE_NAME}>
+              {APP_BASE_NAME === "Headful" ? (
+                <>
+                  <img
+                    src={headfulHelmet}
+                    className="size-8 rounded-lg bg-[#23314c] p-0.5"
+                    alt=""
+                  />
+                  <span className="text-2xl font-medium tracking-tight">Headful</span>
+                  <span className="text-xs text-muted-foreground">Experimental chat</span>
+                </>
+              ) : (
+                <>
+                  <T3Wordmark className="h-4 w-auto shrink-0" aria-hidden />
+                  <span className="text-2xl font-medium tracking-tight text-muted-foreground">
+                    Code
+                  </span>
+                </>
+              )}
             </div>
           }
         >
@@ -501,7 +517,7 @@ function ConnectAccountOption({
             </p>
             <CommandBlock command="npx t3 connect" className="mt-3" />
             <p className="mt-3 text-xs text-muted-foreground">
-              Keep T3 Code running. Select the computers you want to set up above.
+              Keep {APP_BASE_NAME} running. Select the computers you want to set up above.
             </p>
           </div>
         </CollapsiblePanel>

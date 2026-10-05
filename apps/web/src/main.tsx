@@ -59,29 +59,58 @@ const managedAuthShellModule =
 // managed-auth runtime and the initial route's split chunks, before
 // rendering, so the splash holds until real UI paints instead of dropping to
 // a blank window while chunks download.
-export const startup = Promise.all([
-  managedAuthShellModule?.then((module) => module.default) ?? null,
-  router.load(),
-])
-  .then(([ManagedAuthShell]) => {
-    // A route chunk failure still resolves router.load(): the error is parked in
-    // the lazy component and surfaces through the route error boundary. Skip the
-    // paint when a reload is on its way, and only re-arm the guard after a boot
-    // that fetched every chunk it asked for.
-    if (reloadScheduled) return;
-    if (!chunkLoadFailed) clearChunkReloadGuard();
-    ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
-      <React.StrictMode>
-        {ManagedAuthShell && clerkPublishableKey ? (
-          <ManagedAuthShell publishableKey={clerkPublishableKey}>{app}</ManagedAuthShell>
-        ) : (
-          app
-        )}
-      </React.StrictMode>,
-    );
-  })
-  .catch((error: unknown) => {
-    // Let the bootstrap entry show the error unless a reload is already scheduled.
-    if (reloadScheduled) return;
-    throw error;
-  });
+const headfulStartup = async () => {
+  const module = await import("./headful/HeadfulShell");
+  ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
+    <React.StrictMode>
+      <module.HeadfulShell />
+    </React.StrictMode>,
+  );
+};
+const headfulChatRequested = new URL(window.location.href).searchParams.get("headfulChat") === "1";
+const canOpenExperimentalChat = async () => {
+  if (!isElectron || !headfulChatRequested) return false;
+  const value: unknown = await window.headfulBridge?.dispatch("features.list", {});
+  if (
+    !value ||
+    typeof value !== "object" ||
+    !("features" in value) ||
+    !Array.isArray(value.features)
+  )
+    return false;
+  return value.features.some(
+    (feature) =>
+      feature &&
+      typeof feature === "object" &&
+      feature.id === "internal-chat" &&
+      feature.enabled === true,
+  );
+};
+const upstreamStartup = () =>
+  Promise.all([managedAuthShellModule?.then((module) => module.default) ?? null, router.load()])
+    .then(([ManagedAuthShell]) => {
+      // A route chunk failure still resolves router.load(): the error is parked in
+      // the lazy component and surfaces through the route error boundary. Skip the
+      // paint when a reload is on its way, and only re-arm the guard after a boot
+      // that fetched every chunk it asked for.
+      if (reloadScheduled) return;
+      if (!chunkLoadFailed) clearChunkReloadGuard();
+      ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
+        <React.StrictMode>
+          {ManagedAuthShell && clerkPublishableKey ? (
+            <ManagedAuthShell publishableKey={clerkPublishableKey}>{app}</ManagedAuthShell>
+          ) : (
+            app
+          )}
+        </React.StrictMode>,
+      );
+    })
+    .catch((error: unknown) => {
+      // Let the bootstrap entry show the error unless a reload is already scheduled.
+      if (reloadScheduled) return;
+      throw error;
+    });
+
+export const startup = isElectron
+  ? canOpenExperimentalChat().then((enabled) => (enabled ? upstreamStartup() : headfulStartup()))
+  : upstreamStartup();
