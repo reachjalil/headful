@@ -1,0 +1,47 @@
+{
+  "name": "@headfulcloud/admin-utilities",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Open-source Salesforce admin utilities for Headful",
+  "license": "MIT",
+  "files": [
+    "dist",
+    "src",
+    "headful.extension.json",
+    "LICENSE",
+    "README.md",
+    "THIRD_PARTY_NOTICES.md"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./manifest": "./headful.extension.json",
+    "./package.json": "./package.json",
+    "./web": "./src/web/index.tsx"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vp test run --config ../../vite.config.ts --dir ."
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@t3tools/contracts": "workspace:*",
+    "@types/node": "catalog:",
+    "@types/react": "~19.3.0",
+    "esbuild": "0.28.2",
+    "react": "19.2.6",
+    "typescript": "catalog:",
+    "vite-plus": "catalog:",
+    "zod": "4.4.3"
+  },
+  "peerDependencies": {
+    "react": "19.2.6"
+  }
+}

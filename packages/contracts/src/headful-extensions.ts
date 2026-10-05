@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { HeadfulAuthority, HeadfulInput, HeadfulOperation, HeadfulResult } from "./headful.ts";
+import { utilityOperationPolicies, type HeadfulUtilityOperation } from "./headful-utilities.ts";
 
 export const headfulExtensionApiVersion = 1;
 export const extensionIdSchema = z.string().regex(/^[a-z][a-z0-9-]{0,63}$/);
@@ -9,6 +10,66 @@ export const extensionFeatureIdSchema = z
   .max(128);
 const version = z.string().regex(/^\d+\.\d+\.\d+(?:-[A-Za-z0-9.-]+)?$/);
 const componentId = extensionIdSchema;
+export const extensionContributionIdSchema = z
+  .string()
+  .regex(/^[a-z][a-z0-9-]*\/[a-z][a-z0-9-]*$/)
+  .max(128);
+const commandId = z.union([componentId, extensionContributionIdSchema]);
+const contributionFeatures = z.array(extensionFeatureIdSchema).max(20).default([]);
+const contributionWorkspaces = z.array(extensionContributionIdSchema).max(30).default([]);
+const contributionIcon = z.enum([
+  "cloud",
+  "search",
+  "table",
+  "database",
+  "activity",
+  "external-link",
+  "star",
+  "key",
+  "users",
+]);
+export const extensionComponentSchema = z.strictObject({
+  id: extensionContributionIdSchema,
+  kind: z.enum(["panel", "header-control"]),
+});
+export const extensionNavigationSchema = z.strictObject({
+  id: extensionContributionIdSchema,
+  name: z.string().min(1).max(100),
+  description: z.string().max(500).optional(),
+  componentId: extensionContributionIdSchema,
+  icon: contributionIcon.default("cloud"),
+  order: z.number().int().min(0).max(1000).default(100),
+  requiresOrg: z.boolean().default(true),
+  requiredFeatures: contributionFeatures,
+});
+export const extensionHeaderControlSchema = z.strictObject({
+  id: extensionContributionIdSchema,
+  name: z.string().min(1).max(100),
+  componentId: extensionContributionIdSchema,
+  placement: z.enum(["primary", "secondary", "overflow"]).default("primary"),
+  defaultVisible: z.boolean().default(true),
+  order: z.number().int().min(0).max(1000).default(100),
+  workspaceIds: contributionWorkspaces,
+  requiredFeatures: contributionFeatures,
+});
+export const extensionPanelSchema = z.strictObject({
+  id: extensionContributionIdSchema,
+  name: z.string().min(1).max(100),
+  componentId: extensionContributionIdSchema,
+  workspaceIds: contributionWorkspaces,
+  requiredFeatures: contributionFeatures,
+});
+export const extensionActionSchema = z.strictObject({
+  id: extensionContributionIdSchema,
+  name: z.string().min(1).max(100),
+  commandId: extensionContributionIdSchema,
+  icon: contributionIcon.default("external-link"),
+  placement: z.enum(["primary", "overflow"]).default("overflow"),
+  order: z.number().int().min(0).max(1000).default(100),
+  workspaceIds: contributionWorkspaces,
+  requiresOrg: z.boolean().default(true),
+  requiredFeatures: contributionFeatures,
+});
 const relativePath = z
   .string()
   .max(500)
@@ -59,6 +120,13 @@ export const headfulExtensionManifestSchema = z
       .max(150),
     license: z.string().min(1).max(100),
     source: z.literal("bundled"),
+    sourceClassification: z.enum(["open-source", "proprietary"]).default("open-source"),
+    entryPoints: z
+      .strictObject({
+        server: relativePath.default("./dist/index.js"),
+        web: relativePath.optional(),
+      })
+      .default({ server: "./dist/index.js" }),
     defaultEnabled: z.boolean().default(false),
     dependencies: z
       .array(z.strictObject({ id: extensionIdSchema, version: version.optional() }))
@@ -70,13 +138,20 @@ export const headfulExtensionManifestSchema = z
         z.enum([
           "salesforce:read",
           "salesforce:propose",
+          "salesforce:records",
+          "salesforce:query",
+          "salesforce:schema",
+          "salesforce:diagnostics",
+          "salesforce:org-navigation",
+          "local:utility-preferences",
+          "local:workspace",
           "local:settings",
           "local:harness-files",
           "local:mcp-transport",
           "local:mcp-app-resources",
         ]),
       )
-      .max(10)
+      .max(20)
       .default([]),
     settings: z
       .array(
@@ -92,6 +167,11 @@ export const headfulExtensionManifestSchema = z
     contributions: z
       .strictObject({
         features: z.array(extensionFeatureSchema).max(30).default([]),
+        components: z.array(extensionComponentSchema).max(100).default([]),
+        navigation: z.array(extensionNavigationSchema).max(50).default([]),
+        headerControls: z.array(extensionHeaderControlSchema).max(50).default([]),
+        panels: z.array(extensionPanelSchema).max(50).default([]),
+        actions: z.array(extensionActionSchema).max(50).default([]),
         routes: z
           .array(
             z.strictObject({
@@ -160,7 +240,7 @@ export const headfulExtensionManifestSchema = z
         commands: z
           .array(
             z.strictObject({
-              id: componentId,
+              id: commandId,
               name: z.string().min(1).max(100),
               description: z.string().max(500),
               parameters: z
@@ -192,6 +272,11 @@ export const headfulExtensionManifestSchema = z
       })
       .default({
         features: [],
+        components: [],
+        navigation: [],
+        headerControls: [],
+        panels: [],
+        actions: [],
         routes: [],
         skills: [],
         mcp: [],
@@ -221,6 +306,11 @@ export const headfulExtensionManifestSchema = z
     );
     for (const key of [
       "features",
+      "components",
+      "navigation",
+      "headerControls",
+      "panels",
+      "actions",
       "routes",
       "skills",
       "mcp",
@@ -238,6 +328,48 @@ export const headfulExtensionManifestSchema = z
         command.parameters.map((parameter) => parameter.key),
         ["contributions", "commands", index, "parameters"],
       );
+    const issue = (message: string, path: (string | number)[]) =>
+      context.addIssue({ code: "custom", message, path });
+    for (const key of ["components", "navigation", "headerControls", "panels", "actions"] as const)
+      for (const [index, contribution] of manifest.contributions[key].entries())
+        if (!contribution.id.startsWith(`${manifest.id}/`))
+          issue("Native contributions must use their extension namespace.", [
+            "contributions",
+            key,
+            index,
+            "id",
+          ]);
+    for (const [index, command] of manifest.contributions.commands.entries())
+      if (command.id.includes("/") && !command.id.startsWith(`${manifest.id}/`))
+        issue("Commands must use their extension namespace.", [
+          "contributions",
+          "commands",
+          index,
+          "id",
+        ]);
+    for (const key of ["navigation", "panels", "headerControls"] as const)
+      for (const [index, contribution] of manifest.contributions[key].entries()) {
+        const kind = key === "headerControls" ? "header-control" : "panel";
+        if (
+          !manifest.contributions.components.some(
+            (component) => component.id === contribution.componentId && component.kind === kind,
+          )
+        )
+          issue("A native contribution must reference a declared component of the correct kind.", [
+            "contributions",
+            key,
+            index,
+            "componentId",
+          ]);
+      }
+    for (const [index, action] of manifest.contributions.actions.entries())
+      if (!manifest.contributions.commands.some((command) => command.id === action.commandId))
+        issue("A contributed action must reference a declared command.", [
+          "contributions",
+          "actions",
+          index,
+          "commandId",
+        ]);
   });
 export type HeadfulExtensionManifest = z.output<typeof headfulExtensionManifestSchema>;
 export const headfulExtensionDescriptorSchema = z.strictObject({
@@ -260,6 +392,66 @@ export const headfulExtensionsSchema = z.strictObject({
   extensions: z.array(headfulExtensionDescriptorSchema).max(100),
 });
 export type HeadfulExtensionDescriptor = z.output<typeof headfulExtensionDescriptorSchema>;
+export interface HeadfulResolvedContribution<T> {
+  extensionId: string;
+  contribution: T;
+  available: boolean;
+  unavailableReason: string | null;
+}
+/** Shared native clients resolve the same declarations and current lifecycle.
+ * This is presentation data; the runtime still authorizes every invocation. */
+export function resolveHeadfulContributions(
+  extensions: readonly HeadfulExtensionDescriptor[],
+  features: readonly { id: string; enabled: boolean }[],
+) {
+  const resolve = <T extends { requiredFeatures: string[] }>(
+    extension: HeadfulExtensionDescriptor,
+    contribution: T,
+  ): HeadfulResolvedContribution<T> => {
+    const unavailableFeature = contribution.requiredFeatures.find(
+      (id) => !features.some((feature) => feature.id === id && feature.enabled),
+    );
+    const unavailableReason =
+      extension.status !== "active"
+        ? `${extension.manifest.name} is ${extension.status}.`
+        : unavailableFeature
+          ? `Enable ${unavailableFeature} in Headful settings.`
+          : null;
+    return {
+      extensionId: extension.manifest.id,
+      contribution,
+      available: unavailableReason === null,
+      unavailableReason,
+    };
+  };
+  const order = <T extends { order: number }>(
+    first: HeadfulResolvedContribution<T>,
+    second: HeadfulResolvedContribution<T>,
+  ) => first.contribution.order - second.contribution.order;
+  return {
+    navigation: extensions
+      .flatMap((extension) =>
+        extension.manifest.contributions.navigation.map((item) => resolve(extension, item)),
+      )
+      .sort(order),
+    headerControls: extensions
+      .flatMap((extension) =>
+        extension.manifest.contributions.headerControls.map((item) => resolve(extension, item)),
+      )
+      .sort(order),
+    panels: extensions.flatMap((extension) =>
+      extension.manifest.contributions.panels.map((item) => resolve(extension, item)),
+    ),
+    actions: extensions
+      .flatMap((extension) =>
+        extension.manifest.contributions.actions.map((item) => resolve(extension, item)),
+      )
+      .sort(order),
+    commands: extensions.flatMap((extension) =>
+      extension.manifest.contributions.commands.map((item) => resolve(extension, item)),
+    ),
+  };
+}
 export const headfulExtensionInputSchemas = {
   "extensions.list": z.strictObject({}),
   "extensions.inspect": z.strictObject({ id: extensionIdSchema }),
@@ -272,7 +464,7 @@ export const headfulExtensionInputSchemas = {
   }),
   "extensions.command": z.strictObject({
     id: extensionIdSchema,
-    command: componentId,
+    command: commandId,
     input: extensionSettingsSchema.default({}),
   }),
   "extensions.surface": z.strictObject({ id: extensionIdSchema, surfaceId: componentId }),
@@ -291,7 +483,9 @@ export const headfulExtensionResultSchemas = {
   "extensions.surface": extensionSurfaceResultSchema,
 } as const;
 
-// A plugin port cannot mint human reviews, mutate org connections or dispatch provider writes.
+// An Extension port cannot mint human reviews, mutate org connections or dispatch provider writes.
+// Keys originate in the exact public utility policy map, not caller input.
+const utilityOperations = Object.keys(utilityOperationPolicies) as HeadfulUtilityOperation[];
 export const headfulExtensionOperations = [
   "status",
   "listOrgs",
@@ -314,6 +508,7 @@ export const headfulExtensionOperations = [
   "getUserAccess",
   "prepareUserAccess",
   "reconcileAccess",
+  ...utilityOperations,
 ] as const satisfies readonly HeadfulOperation[];
 export type HeadfulExtensionOperation = (typeof headfulExtensionOperations)[number];
 export interface HeadfulExtensionPaths {

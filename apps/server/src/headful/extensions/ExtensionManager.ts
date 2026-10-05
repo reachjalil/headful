@@ -19,6 +19,11 @@ import type {
   HeadfulOperation,
   HeadfulResult,
 } from "../../../../../packages/contracts/src/headful.ts";
+import { headfulInputSchemas } from "../../../../../packages/contracts/src/headful.ts";
+import {
+  utilityOperationPolicies,
+  type HeadfulUtilityOperation,
+} from "../../../../../packages/contracts/src/headful-utilities.ts";
 import * as FeatureService from "../FeatureService.ts";
 import * as Store from "../Store.ts";
 import { HttpError } from "../domain/types.ts";
@@ -41,6 +46,10 @@ type Entry = {
 };
 const permittedOperations = new Set<string>(headfulExtensionOperations);
 const desktopReads = new Set<string>(["status", "listOrgs"]);
+const nativeSafeOperations = new Set<string>([
+  ...desktopReads,
+  ...Object.keys(utilityOperationPolicies),
+]);
 const proposalOperations = new Set<string>([
   "preparePermissionChange",
   "prepareUserCreation",
@@ -79,7 +88,7 @@ export class ExtensionManager {
       if (this.entries.has(manifest.id))
         throw new HttpError(
           400,
-          "plugin_duplicate",
+          "extension_duplicate",
           "Bundled extension identifiers must be unique.",
         );
       for (const feature of manifest.contributions.features)
@@ -89,15 +98,15 @@ export class ExtensionManager {
         )
           throw new HttpError(
             400,
-            "plugin_feature_namespace",
-            "Extension features must use their plugin namespace.",
+            "extension_feature_namespace",
+            "Extension features must use their extension namespace.",
           );
       for (const route of manifest.contributions.routes) {
         if (!route.path.startsWith(`/extensions/${manifest.id}/`) || routes.has(route.path))
           throw new HttpError(
             400,
-            "plugin_route_collision",
-            "Extension routes must use a unique plugin namespace.",
+            "extension_route_collision",
+            "Extension routes must use a unique extension namespace.",
           );
         routes.add(route.path);
         if (
@@ -106,26 +115,27 @@ export class ExtensionManager {
         )
           throw new HttpError(
             400,
-            "plugin_surface_missing",
+            "extension_surface_missing",
             "An extension route references a missing surface.",
           );
       }
       for (const operation of manifest.contributions.desktopOperations) {
         if (
           desktop.has(operation.id) ||
+          Object.hasOwn(headfulInputSchemas, operation.id) ||
           operation.id.startsWith("extensions.") ||
           operation.id.startsWith("features.") ||
           operation.id.startsWith("orgs.")
         )
           throw new HttpError(
             400,
-            "plugin_operation_collision",
+            "extension_operation_collision",
             "Extension desktop operations conflict with an installed operation.",
           );
         if (operation.recovery && !definition.recover)
           throw new HttpError(
             400,
-            "plugin_recovery_missing",
+            "extension_recovery_missing",
             "A declared recovery operation requires a recovery handler.",
           );
         desktop.add(operation.id);
@@ -134,7 +144,7 @@ export class ExtensionManager {
         if (mcpOwner)
           throw new HttpError(
             400,
-            "plugin_transport_collision",
+            "extension_transport_collision",
             "Only one bundled extension can own the local MCP transport.",
           );
         mcpOwner = manifest.id;
@@ -143,7 +153,7 @@ export class ExtensionManager {
         if (typeof setting.defaultValue !== setting.type)
           throw new HttpError(
             400,
-            "plugin_setting_type",
+            "extension_setting_type",
             "Extension setting defaults must match their declared types.",
           );
       this.entries.set(manifest.id, { definition, manifest, status: "inactive" });
@@ -160,7 +170,7 @@ export class ExtensionManager {
   }
   private desired(entry: Entry): boolean {
     const value = this.store.preference<unknown>(
-      `plugin:${entry.manifest.id}:enabled`,
+      `extension:${entry.manifest.id}:enabled`,
       entry.manifest.defaultEnabled,
     );
     return value === true;
@@ -170,7 +180,7 @@ export class ExtensionManager {
     if (!entry)
       throw new HttpError(
         404,
-        "plugin_missing",
+        "extension_missing",
         "This extension is not bundled with this Headful installation.",
       );
     return entry;
@@ -190,13 +200,13 @@ export class ExtensionManager {
     if (entry.manifest.apiVersion !== headfulExtensionApiVersion)
       throw new HttpError(
         409,
-        "plugin_incompatible",
+        "extension_incompatible",
         "This extension requires a different Headful extension API version.",
       );
     if (!this.active(id))
       throw new HttpError(
         403,
-        "plugin_disabled",
+        "extension_disabled",
         "This extension is disabled or unavailable in Headful settings.",
       );
   }
@@ -224,7 +234,7 @@ export class ExtensionManager {
       entry.manifest.settings.map((setting) => [setting.key, setting.defaultValue]),
     );
     const stored = extensionSettingsSchema.safeParse(
-      this.store.preference<unknown>(`plugin:${id}:settings`, {}),
+      this.store.preference<unknown>(`extension:${id}:settings`, {}),
     );
     const values = { ...defaults };
     if (stored.success)
@@ -242,12 +252,12 @@ export class ExtensionManager {
       if (!setting || typeof value !== setting.type)
         throw new HttpError(
           400,
-          "plugin_setting_invalid",
+          "extension_setting_invalid",
           "Use only settings and value types declared by this extension.",
         );
     }
     const next = { ...this.settings(id).values, ...values };
-    this.store.setPreference(`plugin:${id}:settings`, next);
+    this.store.setPreference(`extension:${id}:settings`, next);
     return { id, values: next };
   }
   private context(entry: Entry, signal: AbortSignal, recovery = false): HeadfulExtensionContext {
@@ -256,7 +266,7 @@ export class ExtensionManager {
       if (this.closed || signal.aborted)
         throw new HttpError(
           403,
-          "plugin_stopped",
+          "extension_stopped",
           "This extension has stopped. Reopen it in Headful to continue.",
         );
       if (
@@ -278,22 +288,40 @@ export class ExtensionManager {
           assertContext();
           if (
             !permittedOperations.has(operation) ||
-            (authority.kind === "desktop" && !desktopReads.has(operation)) ||
+            (recovery && !desktopReads.has(operation)) ||
+            (authority.kind === "desktop" && !nativeSafeOperations.has(operation)) ||
             (entry.status === "activating" && !desktopReads.has(operation))
           )
             throw new HttpError(
               403,
-              "plugin_operation_denied",
+              "extension_operation_denied",
               "Extensions cannot issue human reviews or execute Salesforce writes.",
             );
-          if (
+          const utilityPolicy = Object.hasOwn(utilityOperationPolicies, operation)
+            ? utilityOperationPolicies[operation as HeadfulUtilityOperation]
+            : undefined;
+          if (utilityPolicy) {
+            if (!entry.manifest.permissions.includes(utilityPolicy.permission))
+              throw new HttpError(
+                403,
+                "extension_permission_missing",
+                "The extension has not declared this utility capability.",
+              );
+            if (utilityPolicy.desktopOnly && authority.kind !== "desktop")
+              throw new HttpError(
+                403,
+                "extension_operation_denied",
+                "This local utility action requires the native workspace.",
+              );
+            if (utilityPolicy.feature) this.features.require(utilityPolicy.feature);
+          } else if (
             !entry.manifest.permissions.includes("salesforce:read") ||
             (proposalOperations.has(operation) &&
               !entry.manifest.permissions.includes("salesforce:propose"))
           )
             throw new HttpError(
               403,
-              "plugin_permission_missing",
+              "extension_permission_missing",
               "The extension has not declared this Salesforce permission.",
             );
           const result = await this.runtime.dispatch(operation, input, authority);
@@ -308,7 +336,7 @@ export class ExtensionManager {
           if (!entry.manifest.permissions.includes("local:settings"))
             throw new HttpError(
               403,
-              "plugin_permission_missing",
+              "extension_permission_missing",
               "This extension cannot change scoped settings.",
             );
           this.setSettings(id, values);
@@ -378,7 +406,7 @@ export class ExtensionManager {
       } catch {
         entry.cleanupFailed = true;
         entry.error = {
-          code: "plugin_dispose_failed",
+          code: "extension_dispose_failed",
           message:
             "The extension stopped, but one cleanup operation failed. Restart Headful before enabling it again.",
         };
@@ -410,7 +438,7 @@ export class ExtensionManager {
         entry.status = !this.desired(entry) ? "disabled" : !compatible ? "incompatible" : "blocked";
         if (this.desired(entry))
           entry.error = {
-            code: !compatible ? "plugin_incompatible" : "plugin_dependency_unavailable",
+            code: !compatible ? "extension_incompatible" : "extension_dependency_unavailable",
             message: !compatible
               ? "This package requires another Headful extension API version."
               : (dependencyError ??
@@ -428,7 +456,7 @@ export class ExtensionManager {
         await this.dispose(entry);
         entry.status = "blocked";
         entry.error = {
-          code: "plugin_dependency_unavailable",
+          code: "extension_dependency_unavailable",
           message: "A required extension could not activate.",
         };
         return;
@@ -458,7 +486,7 @@ export class ExtensionManager {
           await activation.dispose();
           throw new HttpError(
             400,
-            "plugin_contribution_missing",
+            "extension_contribution_missing",
             "An extension did not implement its declared contributions.",
           );
         }
@@ -469,7 +497,7 @@ export class ExtensionManager {
         delete entry.controller;
         entry.status = "error";
         entry.error = {
-          code: "plugin_activation_failed",
+          code: "extension_activation_failed",
           message: "This extension could not start. Check its configuration or restart Headful.",
         };
       }
@@ -496,22 +524,22 @@ export class ExtensionManager {
     if (entry.manifest.apiVersion !== headfulExtensionApiVersion)
       throw new HttpError(
         409,
-        "plugin_incompatible",
+        "extension_incompatible",
         "This extension requires another Headful extension API version.",
       );
     if (entry.cleanupFailed)
       throw new HttpError(
         503,
-        "plugin_restart_required",
+        "extension_restart_required",
         "Restart Headful before enabling this extension after a cleanup failure.",
       );
-    this.store.setPreference(`plugin:${id}:enabled`, true);
+    this.store.setPreference(`extension:${id}:enabled`, true);
     await this.enqueue(() => this.reconcile());
     return this.inspect(id);
   }
   async disable(id: string) {
     const entry = this.entry(id);
-    this.store.setPreference(`plugin:${id}:enabled`, false);
+    this.store.setPreference(`extension:${id}:enabled`, false);
     entry.controller?.abort();
     // Dependents cease exposing capabilities immediately, before async disposal.
     for (const candidate of this.entries.values())
@@ -538,7 +566,7 @@ export class ExtensionManager {
             await this.dispose(entry);
             entry.status = "error";
             entry.error = {
-              code: "plugin_hook_failed",
+              code: "extension_hook_failed",
               message: "The extension stopped after a lifecycle hook failed.",
             };
           }
@@ -556,7 +584,7 @@ export class ExtensionManager {
     if (!declaration)
       throw new HttpError(
         404,
-        "plugin_command_missing",
+        "extension_command_missing",
         "This command is not declared by the extension.",
       );
     this.requireActive(id);
@@ -570,14 +598,14 @@ export class ExtensionManager {
       )
         throw new HttpError(
           400,
-          "plugin_command_input",
+          "extension_command_input",
           "The command parameters do not match its declaration.",
         );
     for (const parameter of declaration.parameters)
       if (parameter.required && !Object.hasOwn(values, parameter.key))
         throw new HttpError(
           400,
-          "plugin_command_input",
+          "extension_command_input",
           "This extension command requires another parameter.",
         );
     const result = extensionCommandResultSchema.parse(
@@ -592,7 +620,7 @@ export class ExtensionManager {
     if (!declaration)
       throw new HttpError(
         404,
-        "plugin_surface_missing",
+        "extension_surface_missing",
         "This surface is not declared by the extension.",
       );
     this.requireActive(id);
@@ -611,7 +639,7 @@ export class ExtensionManager {
     if (!entry)
       throw new HttpError(
         404,
-        "plugin_operation_missing",
+        "extension_operation_missing",
         "This extension operation is not bundled with Headful.",
       );
     const declared = entry.manifest.contributions.desktopOperations.find(
@@ -621,7 +649,7 @@ export class ExtensionManager {
       if (entry.manifest.apiVersion !== headfulExtensionApiVersion)
         throw new HttpError(
           409,
-          "plugin_incompatible",
+          "extension_incompatible",
           "Use a compatible extension before managing its local configuration.",
         );
       return entry.definition.recover(
@@ -644,14 +672,14 @@ export class ExtensionManager {
     if (!entry)
       throw new HttpError(
         404,
-        "plugin_missing",
+        "extension_missing",
         "The local MCP extension is not bundled with this installation.",
       );
     this.requireActive(entry.manifest.id);
     if (!entry.manifest.permissions.includes("local:mcp-transport"))
       throw new HttpError(
         403,
-        "plugin_permission_missing",
+        "extension_permission_missing",
         "The extension has not declared local MCP transport permission.",
       );
     for (const feature of entry.manifest.contributions.mcp[0]!.requiredFeatures)

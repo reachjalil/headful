@@ -233,12 +233,14 @@ export interface WorkspaceOptions {
   onContext?: (context: WorkspaceContext) => void | Promise<void>;
   onAskAgent?: (message: string, context: WorkspaceContext) => Promise<void>;
   onContinue?: (location: WorkspaceLocation, workflow?: UserWorkflow) => void | Promise<void>;
+  onInspectRecord?: (input: { orgId: string; object: string; recordId: string }) => void;
 }
 export interface WorkspaceHandle {
   navigate(location: WorkspaceLocation): Promise<void>;
   refresh(): Promise<void>;
   destroy(): void;
   getLocation(): WorkspaceLocation;
+  setRecordInspector(handler: WorkspaceOptions["onInspectRecord"]): void;
 }
 
 const html = (value: unknown) =>
@@ -340,6 +342,7 @@ export function mountWorkspace(
   let dataset: LeadDataset | null = null;
   let leadPageIndex = 1;
   let selectedLead: WorkspaceLead | null = null;
+  let recordInspector = options.onInspectRecord;
   let access: UserAccess | null = null;
   let user: UserRecord | null = null;
   let capability: ReviewCapability | null = null;
@@ -553,6 +556,7 @@ export function mountWorkspace(
         busy = false;
         draw();
         updateContext();
+        options.onNavigate?.({ ...location });
       }
     }
   }
@@ -914,7 +918,7 @@ export function mountWorkspace(
     return (
       pageTitle(l.name) +
       back("Leads", "back-leads") +
-      `<section class="hfc-w-card"><div class="hfc-w-record-heading"><h2>${html(l.name)}</h2>${badge(l.status)}</div><p>${html(l.title)} · ${html(l.company)}</p><dl class="hfc-w-detail-grid">${recordField("Company", l.company)}${recordField("Email", l.email)}${recordField("Phone", l.phone)}${recordField("Lead source", l.source)}${recordField("Rating", l.rating)}${recordField("Created", timestamp(l.createdAt))}${recordField("Last activity", timestamp(l.lastActivityAt))}${recordField("Salesforce lead ID", l.id)}${l.description ? recordField("Description", l.description) : ""}</dl><div class="hfc-w-actions">${options.onAskAgent ? control("Bring this lead into chat", "share-lead", "", true) : ""}${compact ? control("Open in Headful workspace", "expand-workspace") : ""}${control("Back to leads", "back-leads")}</div><p class="hfc-w-footnote">Read-only record context. Sharing a selection does not approve any provider action.</p></section>`
+      `<section class="hfc-w-card"><div class="hfc-w-record-heading"><h2>${html(l.name)}</h2>${badge(l.status)}</div><p>${html(l.title)} · ${html(l.company)}</p><dl class="hfc-w-detail-grid">${recordField("Company", l.company)}${recordField("Email", l.email)}${recordField("Phone", l.phone)}${recordField("Lead source", l.source)}${recordField("Rating", l.rating)}${recordField("Created", timestamp(l.createdAt))}${recordField("Last activity", timestamp(l.lastActivityAt))}${recordField("Salesforce lead ID", l.id)}${l.description ? recordField("Description", l.description) : ""}</dl><div class="hfc-w-actions">${options.onAskAgent ? control("Bring this lead into chat", "share-lead", "", true) : ""}${compact ? control("Open in Headful workspace", "expand-workspace") : ""}${recordInspector ? control("Inspect all readable fields", "inspect-record") : ""}${control("Back to leads", "back-leads")}</div><p class="hfc-w-footnote">Read-only record context. Sharing a selection does not approve any provider action.</p></section>`
     );
   }
   async function perform(operation: () => Promise<void>, mutate = false) {
@@ -1355,6 +1359,14 @@ export function mountWorkspace(
             case "open-lead":
               await navigate({ view: "lead", orgId: requireOrg(), recordId: button.dataset.id });
               break;
+            case "inspect-record":
+              if (recordInspector && location.view === "lead" && location.recordId)
+                recordInspector({
+                  orgId: dataset?.org.id || requireOrg(),
+                  object: "Lead",
+                  recordId: location.recordId,
+                });
+              break;
             case "previous-leads":
               if (leadPageIndex > 1) leadPageIndex--;
               dataset = await service.listLeads({
@@ -1551,6 +1563,13 @@ export function mountWorkspace(
     navigate,
     refresh,
     getLocation: () => ({ ...location }),
+    setRecordInspector(handler) {
+      recordInspector = handler;
+      if (location.view === "lead" && !destroyed) {
+        content = leadPage();
+        draw();
+      }
+    },
     destroy() {
       destroyed = true;
       version++;

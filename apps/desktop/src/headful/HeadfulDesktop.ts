@@ -134,7 +134,7 @@ export const register = Effect.gen(function* () {
     }
     if (operation === "system.about")
       return {
-        version: "0.1.0",
+        version: "0.2.0",
         ...(buildCommit ? { buildCommit } : {}),
         upstreamVersion: "0.0.45",
         upstreamCommit: "efecd3cf8bcec3d1891b5f5a27dc2f6d797c6448",

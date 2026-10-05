@@ -35,7 +35,7 @@ import {
   selectCliRuntimeExternalDependencies,
 } from "./lib/cli-external-packages.ts";
 import { loadRepoEnv } from "./lib/public-config.ts";
-import { resolveHeadfulExtensionPackage } from "./lib/headful-extension-package.ts";
+import { resolveHeadfulExtensionPackages } from "./lib/headful-extension-package.ts";
 import { selectDesktopRuntimeExternalDependencies } from "./lib/desktop-external-packages.ts";
 import { resolveCatalogDependencies } from "./lib/resolve-catalog.ts";
 
@@ -2668,6 +2668,7 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
   // source file was never written fails the electron-builder step.
   wslRuntimeBundled = false,
   arch?: typeof BuildArch.Type,
+  mcpIntegrationBundled = false,
 ) {
   const buildConfig: Record<string, unknown> = {
     appId: DESKTOP_APP_ID,
@@ -2694,7 +2695,9 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
     extraResources: [
       ...DESKTOP_EXTRA_RESOURCES,
       { from: "apps/desktop/prod-resources/headful", to: "headful" },
-      { from: "apps/desktop/prod-resources/headful-mcp.mjs", to: "headful-mcp.mjs" },
+      ...(mcpIntegrationBundled
+        ? [{ from: "apps/desktop/prod-resources/headful-mcp.mjs", to: "headful-mcp.mjs" }]
+        : []),
       ...(platform === "linux" ? LINUX_CAPTURE_EXTRA_RESOURCES : []),
       ...(platform === "linux" ? LINUX_BROWSER_SECRET_EXTRA_RESOURCES : []),
       ...(platform === "win" ? WINDOWS_SERVER_EXTRA_RESOURCES : []),
@@ -3646,28 +3649,35 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
 
   // electron-builder is filtering out stageResourcesDir directory in the AppImage for production
   const stageProdResourcesDir = path.join(stageAppDir, "apps/desktop/prod-resources");
-  const integration = yield* Effect.try(() => resolveHeadfulExtensionPackage(repoRoot));
-  const integrationAssets = yield* Effect.tryPromise(async () => {
-    const { getMcpAppsAssets } = await import(pathToFileURL(integration.entry).href);
-    return getMcpAppsAssets();
-  });
+  const extensions = yield* Effect.try(() => resolveHeadfulExtensionPackages(repoRoot));
+  const integration = extensions.find(
+    (extension) => extension.packageName === "@headfulcloud/mcp-apps",
+  );
+  const integrationAssets = integration
+    ? yield* Effect.tryPromise(async () => {
+        const { getMcpAppsAssets } = await import(pathToFileURL(integration.entry).href);
+        return getMcpAppsAssets();
+      })
+    : undefined;
   yield* fs.copy(stageResourcesDir, stageProdResourcesDir);
   yield* fs.copy(
     path.join(repoRoot, "assets/headful"),
     path.join(stageProdResourcesDir, "headful"),
   );
-  yield* fs.copy(
-    integrationAssets.bridgeScript,
-    path.join(stageProdResourcesDir, "headful-mcp.mjs"),
-  );
-  yield* fs.copy(
-    integrationAssets.assetsDirectory,
-    path.join(stageProdResourcesDir, "headful/mcp-app"),
-  );
-  yield* fs.copy(
-    integrationAssets.pluginArchive,
-    path.join(stageProdResourcesDir, "headful/headful-plugin.zip"),
-  );
+  if (integrationAssets) {
+    yield* fs.copy(
+      integrationAssets.bridgeScript,
+      path.join(stageProdResourcesDir, "headful-mcp.mjs"),
+    );
+    yield* fs.copy(
+      integrationAssets.assetsDirectory,
+      path.join(stageProdResourcesDir, "headful/mcp-app"),
+    );
+    yield* fs.copy(
+      integrationAssets.pluginArchive,
+      path.join(stageProdResourcesDir, "headful/headful-plugin.zip"),
+    );
+  }
   yield* fs.copy(
     path.join(repoRoot, "LICENSE"),
     path.join(stageProdResourcesDir, "HEADFUL-LICENSE.txt"),
@@ -3715,45 +3725,51 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
           arch: options.arch,
           fffNodeVersion: serverPackageJson.dependencies["@ff-labs/fff-node"],
         });
-  // A development link must never escape into the distributable. Stage an
-  // audited self-contained compiled package and install that local snapshot.
-  const extensionStage = path.join(stageAppDir, "vendor/headfulcloud-mcp-apps");
-  yield* Effect.tryPromise(async () => {
-    await NodeFSP.mkdir(extensionStage, { recursive: true });
-    await NodeFSP.cp(path.join(integration.directory, "dist"), path.join(extensionStage, "dist"), {
-      recursive: true,
-    });
-    for (const name of [
-      "LICENSE",
-      "NOTICE",
-      "LICENSES",
-      "headful.extension.json",
-      "THIRD_PARTY_NOTICES.md",
-      "README.md",
-    ]) {
-      if (
-        await NodeFSP.stat(path.join(integration.directory, name)).then(
-          () => true,
-          () => false,
+  // Snapshot every installed registration. No workspace/private source link
+  // can escape into the distributable; optional missing modules remain absent.
+  for (const extension of extensions) {
+    const vendorName = extension.packageName.replace(/^@/, "").replace("/", "-");
+    const extensionStage = path.join(stageAppDir, "vendor", vendorName);
+    yield* Effect.tryPromise(async () => {
+      await NodeFSP.mkdir(extensionStage, { recursive: true });
+      await NodeFSP.cp(path.join(extension.directory, "dist"), path.join(extensionStage, "dist"), {
+        recursive: true,
+      });
+      for (const name of [
+        "LICENSE",
+        "NOTICE",
+        "LICENSES",
+        "headful.extension.json",
+        "THIRD_PARTY_NOTICES.md",
+        "README.md",
+      ]) {
+        if (
+          await NodeFSP.stat(path.join(extension.directory, name)).then(
+            () => true,
+            () => false,
+          )
         )
-      )
-        await NodeFSP.cp(path.join(integration.directory, name), path.join(extensionStage, name), {
-          recursive: true,
-        });
-    }
-    const {
-      scripts: _scripts,
-      devDependencies: _devDependencies,
-      peerDependencies: _peers,
-      peerDependenciesMeta: _peerMeta,
-      ...compiledManifest
-    } = integration.manifest;
-    await NodeFSP.writeFile(
-      path.join(extensionStage, "package.json"),
-      JSON.stringify(compiledManifest, null, 2) + "\n",
-    );
-  });
-  stageDependencies["@headfulcloud/mcp-apps"] = "file:./vendor/headfulcloud-mcp-apps";
+          await NodeFSP.cp(path.join(extension.directory, name), path.join(extensionStage, name), {
+            recursive: true,
+          });
+      }
+      const {
+        scripts: _scripts,
+        devDependencies: _devDependencies,
+        peerDependencies: _peers,
+        peerDependenciesMeta: _peerMeta,
+        ...compiledManifest
+      } = extension.manifest;
+      // Public renderer components have already been bundled into the web app.
+      // Runtime packages include compiled server artifacts only.
+      if (compiledManifest.exports) delete compiledManifest.exports["./web"];
+      await NodeFSP.writeFile(
+        path.join(extensionStage, "package.json"),
+        JSON.stringify(compiledManifest, null, 2) + "\n",
+      );
+    });
+    stageDependencies[extension.packageName] = `file:./vendor/${vendorName}`;
+  }
   const stagePatchedDependencies = createStagePatchedDependencies(
     workspacePatchedDependencies,
     stageDependencies,
@@ -3789,6 +3805,7 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
         : undefined,
       bundlesWslRuntime({ platform: options.platform, runtimeArchivePath: options.wslRuntime }),
       options.arch,
+      Boolean(integrationAssets),
     ),
     dependencies: stageDependencies,
     devDependencies: {

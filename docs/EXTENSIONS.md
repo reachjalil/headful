@@ -11,21 +11,31 @@ The checked-in [headful.extensions.json](../headful.extensions.json) lists trust
 ```json
 {
   "schemaVersion": 1,
-  "extensions": [{ "packageName": "@headfulcloud/mcp-apps" }]
+  "extensions": [
+    { "packageName": "@headfulcloud/admin-utilities" },
+    { "packageName": "@headfulcloud/mcp-apps", "optional": true }
+  ]
 }
 ```
 
-For the current beta, `apps/server/package.json` uses `link:../../../headfulCloud/packages/mcp-apps`. Keep the private `headfulCloud` checkout next to this repository, build the package's compiled `dist`, and run `pnpm headful:setup`. The public app consumes compiled output through the npm package name. Nothing is published or downloaded from the `@headfulcloud` npm namespace by this workflow. A missing package produces an explicit bootstrap error.
+The open-source admin utilities are a normal local workspace package. `pnpm headful:setup` installs the Mac dependencies and compiles their server activation module. A clean public clone can develop and package Headful without a private checkout, registry credentials, or changes to its registration manifest.
+
+The proprietary MCP Apps integration is optional and linked only in the owner's development environment. Its implementation remains in the adjacent private repository. Build it and explicitly link the compiled package after public setup:
 
 ```sh
-pnpm --dir ../headfulCloud extensions:build
 pnpm headful:setup
+pnpm --dir ../headfulCloud extensions:build
+pnpm --dir ../headfulCloud extensions:link
 pnpm headful:dev
 ```
 
-Adding another trusted extension requires its local dependency link and package registration, rather than modifying the Salesforce service or adding a special branch to the extension manager. The host resolves the package's `./manifest` export, validates its JSON identity, imports its default activation definition, and checks that both declare the same manifest. Duplicate package IDs, colliding transport/operation ownership, invalid namespaces, incompatible API versions, and missing dependencies fail closed.
+Nothing is published or downloaded from the `@headfulcloud` npm namespace. The developer linking command accepts only optional packages already named in the checked-in registry, checks their compiled entry and manifest, and refuses to replace a different installed package. Re-run the local link command after an install if the package manager removes the optional link. `pnpm headful:extensions unlink ../headfulCloud/packages/mcp-apps` removes that exact development link.
 
-A core-only build can use `"extensions": []` and omit the private dependency. It retains CLI onboarding, org management, the native workspace, and reviewed Salesforce workflows. The MCP Apps package is required for the default integrated beta build.
+The host resolves package metadata and its `./manifest` export before importing its compiled default activation definition. A missing optional package is skipped. A missing required package, an installed package with an invalid manifest, duplicate identity, colliding operation ownership, or an invalid namespace fails closed. Compatibility and activation failures are reported by the Extensions manager.
+
+Adding another trusted Extension requires its package registration, typed manifest, and a compiled activation definition. This does not add a special Salesforce service branch to the manager. Renderer components register against namespaced component IDs; manifests contribute navigation, panels, header controls, actions, and commands that resolve through those IDs. The shared shell owns the DOM and workspace layout.
+
+The public utility Extension supplies org shortcuts, record inspection, SOQL, schema exploration, and read-only diagnostics. Its server definition and frontend components live in `packages/headful-admin-utilities`; the core CLI broker retains Salesforce authority. The default native workspace and connection flows stay usable when either Extension is disabled or the proprietary package is absent.
 
 ## Manifest and lifecycle
 
@@ -46,8 +56,12 @@ Removing a harness configuration and revoking existing grants remain available t
 
 Extensions are trusted native code loaded from the application's build registration. They are not a sandbox for arbitrary third-party JavaScript. The beta has no marketplace downloader, arbitrary path loader, model-driven installation, or remote entitlement service. Manifest permission declarations constrain the host's supplied runtime port; code is still subject to normal Node and process trust.
 
-The restricted port exposes bounded reads and draft/proposal operations. It cannot authorize orgs, create human reviews, approve proposals, or execute Salesforce writes. Client access still requires an explicit current org-scoped grant, and the core independently revalidates features, org authority, and workflow state. Native human review remains in the public Salesforce runtime.
+The restricted port exposes bounded reads and draft/proposal operations, plus declared narrow CLI utility capabilities for querying, inspection, schema, limits, jobs, logs, and org shortcuts. It has no general command execution capability. It cannot authorize orgs, create human reviews, approve proposals, or execute Salesforce writes. Client access still requires an explicit current org-scoped grant, and the core independently revalidates features, org authority, and workflow state. Native human review remains in the public Salesforce runtime.
 
 `@headfulcloud/mcp-apps` is the first proprietary extension. Its private source, build scripts, tests, App wrappers, bridge, harness setup, and agent-plugin packaging belong in `headfulCloud/packages/mcp-apps`. The pure native workspace renderer and contracts remain public. The beta extension is included for use under its package license; npm publication remains a separate owner action.
 
-The Mac packaging pipeline audits the linked distribution and snapshots only compiled `dist`, manifest, and license/notice files. It converts the development link into a staged local package, includes the physical stdio helper and self-contained App assets, and installs no private source checkout in the app. Bundled third-party code retains its licenses. There are no source maps in the proprietary distribution.
+The Mac packaging pipeline audits every installed registered distribution and snapshots only compiled `dist`, manifest, and license/notice files. Public utility frontend source is bundled into the web renderer; the installed server package contains compiled code. Missing optional modules add no resources or dependencies. It converts the development link into a staged local package, includes the physical stdio helper and self-contained App assets, and installs no private source checkout in the app. Bundled third-party code retains its licenses. There are no source maps in the proprietary distribution.
+
+## Planned proprietary capabilities
+
+Backups, restore, scheduled snapshots, sandbox seeding, metadata comparison/deployment, bulk imports, and advanced automation are outside this utility beta. Backup and restore implementation belongs in a future separate proprietary `@headfulcloud/*` Extension, never in public utility source or history.

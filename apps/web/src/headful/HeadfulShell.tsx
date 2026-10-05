@@ -33,6 +33,17 @@ import {
 import { reviewCapabilitySchema } from "@t3tools/contracts/headful-workspace/workflow-schema";
 import { mountWorkspace, type WorkspaceService, type WorkspaceLocation } from "./workspace-view";
 import { HeadfulExtensions } from "./HeadfulExtensions";
+import { HeadfulWorkspaceShell, type WorkspaceCommand } from "./HeadfulWorkspaceShell";
+import {
+  headfulExtensionResultSchemas,
+  resolveHeadfulContributions,
+  type HeadfulExtensionDescriptor,
+} from "@t3tools/contracts/headful-extensions";
+import {
+  adminUtilityComponents,
+  orgEnvironment,
+  type UtilityComponentProps,
+} from "@headfulcloud/admin-utilities/web";
 import helmet from "./helmet.svg";
 import "./headful.css";
 import "./workspace.css";
@@ -122,7 +133,14 @@ type Status = z.infer<typeof statusSchema>;
 type Org = z.infer<typeof managedOrgSchema>;
 type Cli = z.infer<typeof cliSchema>;
 type Discovered = z.infer<typeof discoveredSchema>["connections"];
-type Page = "orgs" | "workspace" | "integrations" | "activity" | "extensions" | "settings";
+type Page =
+  | "orgs"
+  | "workspace"
+  | "integrations"
+  | "activity"
+  | "extensions"
+  | "settings"
+  | "utility";
 const pages: Array<{ id: Page; title: string; symbol: string }> = [
   { id: "orgs", title: "Your orgs", symbol: "☁" },
   { id: "workspace", title: "Salesforce workspace", symbol: "▤" },
@@ -138,6 +156,7 @@ const labels: Record<Page, string> = {
   activity: "The work, with a record.",
   extensions: "A little more Headful.",
   settings: "Make Headful your own.",
+  utility: "Your admin workspace",
 };
 
 async function dispatch(operation: string, input: unknown = {}): Promise<unknown> {
@@ -200,9 +219,13 @@ function createWorkspaceService(): WorkspaceService {
 function Workspace({
   initial,
   onNavigate,
+  onInspectRecord,
 }: {
   initial: WorkspaceLocation;
   onNavigate: (location: WorkspaceLocation) => void;
+  onInspectRecord?:
+    | ((input: { orgId: string; object: string; recordId: string }) => void)
+    | undefined;
 }) {
   const element = useRef<HTMLDivElement>(null);
   const initialRef = useRef(initial);
@@ -220,6 +243,9 @@ function Workspace({
       handle.current = null;
     };
   }, [service, onNavigate]);
+  useEffect(() => {
+    handle.current?.setRecordInspector(onInspectRecord);
+  }, [onInspectRecord]);
   return <div className="hf-workspace-mount" ref={element} />;
 }
 function Modal({
@@ -280,6 +306,13 @@ function Modal({
 export function HeadfulShell() {
   const [page, setPage] = useState<Page>("orgs");
   const [status, setStatus] = useState<Status | null>(null);
+  const [extensions, setExtensions] = useState<HeadfulExtensionDescriptor[]>([]);
+  const [extensionSettings, setExtensionSettings] = useState<
+    Record<string, Record<string, string | number | boolean>>
+  >({});
+  const [utilityWorkspaceId, setUtilityWorkspaceId] = useState("");
+  const [utilityInput, setUtilityInput] = useState<Record<string, string | number | boolean>>({});
+  const [workspaceOrgs, setWorkspaceOrgs] = useState<Record<string, string>>({});
   const [cli, setCli] = useState<Cli | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
@@ -313,10 +346,22 @@ export function HeadfulShell() {
       setBusy(null);
     }
   }, []);
-  const refresh = useCallback(
-    async () => setStatus(statusSchema.parse(await dispatch("status"))),
-    [],
-  );
+  const refresh = useCallback(async () => {
+    const [state, installed] = await Promise.all([dispatch("status"), dispatch("extensions.list")]);
+    setStatus(statusSchema.parse(state));
+    const list = headfulExtensionResultSchemas["extensions.list"].parse(installed).extensions;
+    setExtensions(list);
+    const settings = await Promise.all(
+      list
+        .filter((item) => item.status === "active")
+        .map(async (item) =>
+          headfulExtensionResultSchemas["extensions.settings"].parse(
+            await dispatch("extensions.settings", { id: item.manifest.id }),
+          ),
+        ),
+    );
+    setExtensionSettings(Object.fromEntries(settings.map((item) => [item.id, item.values])));
+  }, []);
   const enabled = useCallback(
     (id: string) => status?.features.find((feature) => feature.id === id)?.enabled ?? false,
     [status],
@@ -345,7 +390,11 @@ export function HeadfulShell() {
         view: path.split("/")[1] || "home",
         ...parameters,
       });
-      if (parsed.success) setWorkspaceLocation(parsed.data);
+      if (parsed.success) {
+        setWorkspaceLocation(parsed.data);
+        if (parsed.data.orgId)
+          setWorkspaceOrgs((value) => ({ ...value, "core/workspace": parsed.data.orgId! }));
+      }
     }
     setPage(known.id);
   }, []);
@@ -359,12 +408,18 @@ export function HeadfulShell() {
     });
   }, [route]);
   const navigate = (next: Page) => {
+    if (next === "workspace" && !workspaceLocation.orgId && status?.defaultOrgId) {
+      const orgId = workspaceOrgs["core/workspace"] || status.defaultOrgId;
+      setWorkspaceLocation((value) => ({ ...value, orgId }));
+      setWorkspaceOrgs((value) => ({ ...value, "core/workspace": orgId }));
+    }
     setPage(next);
     setError("");
     setNotice("");
   };
   const onWorkspaceNavigate = useCallback((next: WorkspaceLocation) => {
     setWorkspaceLocation(next);
+    if (next.orgId) setWorkspaceOrgs((value) => ({ ...value, "core/workspace": next.orgId! }));
     const { view, ...parameters } = next;
     history.replaceState(
       null,
@@ -374,9 +429,136 @@ export function HeadfulShell() {
   }, []);
   const openWorkspace = (org: Org, view: WorkspaceLocation["view"] = "home") => {
     setWorkspaceLocation({ orgId: org.id, view });
+    setWorkspaceOrgs((value) => ({ ...value, "core/workspace": org.id }));
     navigate("workspace");
   };
   const current = status?.orgs.find((org) => org.id === status.defaultOrgId);
+  const contributions = useMemo(
+    () => resolveHeadfulContributions(extensions, status?.features ?? []),
+    [extensions, status?.features],
+  );
+  const utilityNavigation = contributions.navigation.find(
+    (item) => item.contribution.id === utilityWorkspaceId,
+  );
+  const workspaceId = page === "utility" ? utilityWorkspaceId : "core/workspace";
+  const workspaceOrgId =
+    page === "workspace"
+      ? workspaceLocation.orgId || workspaceOrgs[workspaceId] || ""
+      : workspaceOrgs[workspaceId] || "";
+  const workspaceOrg = status?.orgs.find((org) => org.id === workspaceOrgId);
+  const openUtility = (
+    componentId: string,
+    input: Record<string, string | number | boolean> = {},
+  ) => {
+    const entry = contributions.navigation.find(
+      (item) => item.contribution.componentId === componentId,
+    );
+    if (!entry?.available) {
+      setError(
+        entry?.unavailableReason || "This utility is unavailable in the installed extensions.",
+      );
+      return;
+    }
+    const savedOrg = typeof input.orgId === "string" ? input.orgId : undefined;
+    const orgId =
+      savedOrg ||
+      workspaceOrgs[entry.contribution.id] ||
+      workspaceOrgId ||
+      status?.defaultOrgId ||
+      "";
+    setWorkspaceOrgs((value) => ({ ...value, [entry.contribution.id]: orgId }));
+    setUtilityWorkspaceId(entry.contribution.id);
+    setUtilityInput(input);
+    navigate("utility");
+  };
+  const selectWorkspaceOrg = (orgId: string) => {
+    if (!status?.orgs.some((org) => org.id === orgId)) return;
+    setWorkspaceOrgs((value) => ({ ...value, [workspaceId]: orgId }));
+    if (page === "workspace") setWorkspaceLocation({ view: "home", orgId });
+    else setUtilityInput({});
+    setNotice("Workspace target changed explicitly. The default org and saved work are unchanged.");
+  };
+  const runExtensionCommand = (extensionId: string, command: string) =>
+    void action("Running workspace command", async () => {
+      const declaration = contributions.commands.find(
+        (item) => item.extensionId === extensionId && item.contribution.id === command,
+      )?.contribution;
+      const input = declaration?.parameters.some((parameter) => parameter.key === "org-id")
+        ? { "org-id": workspaceOrgId }
+        : {};
+      const result = headfulExtensionResultSchemas["extensions.command"].parse(
+        await dispatch("extensions.command", { id: extensionId, command, input }),
+      );
+      setNotice(result.message);
+    });
+  const workspaceActions = contributions.actions
+    .filter(
+      (item) =>
+        item.available &&
+        (item.contribution.workspaceIds.length === 0 ||
+          item.contribution.workspaceIds.includes(workspaceId)),
+    )
+    .map((item) => ({
+      id: item.contribution.id,
+      name: item.contribution.name,
+      disabled: item.contribution.requiresOrg && !workspaceOrg,
+      reason: !workspaceOrg ? "Choose a connected target org." : undefined,
+      run: () => runExtensionCommand(item.extensionId, item.contribution.commandId),
+    }));
+  const utilityContext: UtilityComponentProps = {
+    orgId: workspaceOrgId,
+    workspaceId,
+    orgs: status?.orgs ?? [],
+    dispatch,
+    onOrgChange: selectWorkspaceOrg,
+    onNavigate: openUtility,
+    onFeedback: setNotice,
+    initialInput: utilityInput,
+    actionContributions: workspaceActions,
+  };
+  const workspaceCommands: WorkspaceCommand[] = [
+    ...contributions.navigation
+      .filter((item) => item.available)
+      .map((item) => ({
+        id: item.contribution.id,
+        name: item.contribution.name,
+        description: item.contribution.description || "Open the contributed workspace",
+        run: () => openUtility(item.contribution.componentId),
+      })),
+    ...contributions.commands
+      .filter(
+        (item) =>
+          item.available &&
+          item.contribution.parameters.every(
+            (parameter) => !parameter.required || parameter.key === "org-id",
+          ),
+      )
+      .map((item) => ({
+        id: `${item.extensionId}/${item.contribution.id}`,
+        name: item.contribution.name,
+        description: item.contribution.description,
+        disabled:
+          item.contribution.parameters.some(
+            (parameter) => parameter.key === "org-id" && parameter.required,
+          ) && !workspaceOrg,
+        reason: !workspaceOrg ? "Choose a connected target org." : undefined,
+        run: () => runExtensionCommand(item.extensionId, item.contribution.id),
+      })),
+    ...(contributions.navigation.some(
+      (item) => item.available && item.contribution.icon === "cloud",
+    )
+      ? (status?.orgs ?? []).map((org) => ({
+          id: `org/${org.id}`,
+          name: `Switch workspace to ${org.label}`,
+          description: `${orgEnvironment(org)} · ${org.alias || org.username} · ${org.salesforceOrgId}`,
+          disabled:
+            page === "workspace" &&
+            Boolean(workspaceLocation.workflowId || workspaceLocation.proposalId),
+          reason: "Saved work is pinned. Open a new workspace first.",
+          run: () => selectWorkspaceOrg(org.id),
+        }))
+      : []),
+  ];
   const isDisabled = Boolean(busy);
   const setFeature = (id: string, value: boolean) =>
     void action("Saving feature", async () => {
@@ -532,6 +714,37 @@ export function HeadfulShell() {
                 {item.title}
               </button>
             ))}
+          {contributions.navigation.some((item) => item.available) && (
+            <p className="hf-eyebrow hf-utility-nav-title">ADMIN UTILITIES</p>
+          )}
+          {contributions.navigation
+            .filter((item) => item.available)
+            .map((item) => (
+              <button
+                className={`hf-nav-button ${page === "utility" && utilityWorkspaceId === item.contribution.id ? "active" : ""}`}
+                type="button"
+                key={item.contribution.id}
+                title={item.contribution.description}
+                onClick={() => openUtility(item.contribution.componentId)}
+              >
+                <span aria-hidden="true">
+                  {
+                    {
+                      cloud: "☁",
+                      search: "⌕",
+                      table: "▤",
+                      database: "▥",
+                      activity: "⌁",
+                      "external-link": "↗",
+                      star: "☆",
+                      key: "◇",
+                      users: "♙",
+                    }[item.contribution.icon]
+                  }
+                </span>
+                {item.contribution.name}
+              </button>
+            ))}
         </nav>
         <div className="hf-sidebar-bottom">
           <p>
@@ -561,16 +774,35 @@ export function HeadfulShell() {
       </aside>
       <div className="hf-main">
         <header className="hf-topbar">
-          <span>Salesforce first.</span>
+          <span>
+            {page === "workspace" || page === "utility"
+              ? "Explicit workspace target"
+              : "Salesforce first. · Default for new work"}
+          </span>
           <div>
-            {current ? (
+            {(page === "workspace" || page === "utility" ? workspaceOrg : current) ? (
               <span className="hf-context">
-                <i style={{ background: current.color }} />
-                {current.label}
-                <small>{current.isSandbox ? "Sandbox" : "Production"}</small>
+                <i
+                  style={{
+                    background: (page === "workspace" || page === "utility"
+                      ? workspaceOrg
+                      : current
+                    )?.color,
+                  }}
+                />
+                {(page === "workspace" || page === "utility" ? workspaceOrg : current)?.label}
+                <small>
+                  {orgEnvironment(
+                    (page === "workspace" || page === "utility" ? workspaceOrg : current)!,
+                  )}
+                </small>
               </span>
             ) : (
-              <span className="hf-muted">No default org</span>
+              <span className="hf-muted">
+                {page === "workspace" || page === "utility"
+                  ? "Choose a workspace target"
+                  : "No default org"}
+              </span>
             )}
             <button
               className="hf-icon-button"
@@ -583,7 +815,9 @@ export function HeadfulShell() {
             </button>
           </div>
         </header>
-        <main className={`hf-content ${page === "workspace" ? "hf-content-workspace" : ""}`}>
+        <main
+          className={`hf-content ${page === "workspace" || page === "utility" ? "hf-content-workspace" : ""}`}
+        >
           {error && (
             <div className="hf-alert" role="alert">
               {error}
@@ -599,7 +833,7 @@ export function HeadfulShell() {
               {busy}…
             </div>
           )}
-          {page !== "workspace" && (
+          {page !== "workspace" && page !== "utility" && (
             <div className="hf-page-heading">
               <div>
                 <p className="hf-eyebrow">
@@ -883,20 +1117,110 @@ export function HeadfulShell() {
           )}
           {page === "workspace" &&
             (enabled("salesforce-workspace") ? (
-              <Workspace
-                key={`${workspaceLocation.orgId || "none"}:${workspaceLocation.workflowId || "none"}:${workspaceLocation.proposalId || "none"}`}
-                initial={{
-                  ...workspaceLocation,
-                  ...(!workspaceLocation.orgId && current ? { orgId: current.id } : {}),
-                }}
-                onNavigate={onWorkspaceNavigate}
-              />
+              <HeadfulWorkspaceShell
+                title="Salesforce workspace"
+                context={utilityContext}
+                contributions={contributions}
+                commands={workspaceCommands}
+                native
+                pinned={Boolean(workspaceLocation.workflowId || workspaceLocation.proposalId)}
+                compact={extensionSettings["admin-utilities"]?.["compact-results"] !== false}
+              >
+                <Workspace
+                  key={`${workspaceLocation.orgId || "none"}:${workspaceLocation.workflowId || "none"}:${workspaceLocation.proposalId || "none"}`}
+                  initial={{
+                    ...workspaceLocation,
+                    ...(!workspaceLocation.orgId && workspaceOrgId
+                      ? { orgId: workspaceOrgId }
+                      : {}),
+                  }}
+                  onNavigate={onWorkspaceNavigate}
+                  onInspectRecord={
+                    contributions.navigation.some(
+                      (item) =>
+                        item.available &&
+                        item.contribution.componentId === "admin-utilities/record-inspector",
+                    )
+                      ? (input) => openUtility("admin-utilities/record-inspector", input)
+                      : undefined
+                  }
+                />
+              </HeadfulWorkspaceShell>
             ) : (
               <div className="hf-empty">
                 <h2>Salesforce workspace is disabled.</h2>
                 <p>Enable it in Settings to inspect org records and workflows.</p>
               </div>
             ))}
+          {page === "utility" && (
+            <HeadfulWorkspaceShell
+              title={utilityNavigation?.contribution.name || "Admin utility"}
+              context={utilityContext}
+              contributions={contributions}
+              commands={workspaceCommands}
+              compact={
+                extensionSettings[utilityNavigation?.extensionId || ""]?.["compact-results"] !==
+                false
+              }
+            >
+              {!utilityNavigation?.available ? (
+                <div className="hf-empty">
+                  <h2>This contribution is unavailable.</h2>
+                  <p>
+                    {utilityNavigation?.unavailableReason ||
+                      "The installed extension no longer declares this workspace."}
+                  </p>
+                  <button
+                    className="hf-button"
+                    type="button"
+                    onClick={() => navigate("extensions")}
+                  >
+                    Manage extensions
+                  </button>
+                </div>
+              ) : utilityNavigation.contribution.requiresOrg && !workspaceOrg ? (
+                <div className="hf-empty">
+                  <h2>Choose a connected target org.</h2>
+                  <p>
+                    The previous target is not an available connection. Use the org selector above
+                    or connect it from Your orgs.
+                  </p>
+                </div>
+              ) : (
+                (() => {
+                  const panels = contributions.panels.filter(
+                    (item) =>
+                      item.available &&
+                      (item.contribution.workspaceIds.includes(workspaceId) ||
+                        (item.contribution.workspaceIds.length === 0 &&
+                          item.contribution.componentId ===
+                            utilityNavigation.contribution.componentId)),
+                  );
+                  const components = [
+                    ...new Set(
+                      panels.length
+                        ? panels.map((item) => item.contribution.componentId)
+                        : [utilityNavigation.contribution.componentId],
+                    ),
+                  ];
+                  return components.map((id) => {
+                    const Component = adminUtilityComponents[id];
+                    return Component ? (
+                      <Component key={`${id}:${workspaceOrgId}`} {...utilityContext} />
+                    ) : (
+                      <div className="hf-empty" key={id}>
+                        <h2>Panel unavailable in this build.</h2>
+                        <p>
+                          The manifest declares {id}, but its reviewed React component is not
+                          registered.
+                        </p>
+                      </div>
+                    );
+                  });
+                })()
+              )}
+            </HeadfulWorkspaceShell>
+          )}
           {page === "integrations" && (
             <Integrations status={status} busy={isDisabled} action={action} />
           )}

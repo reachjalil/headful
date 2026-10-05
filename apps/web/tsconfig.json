@@ -36,6 +36,9 @@
     "../../scripts/lib/third-party-licenses.ts",
     "../../packages/contracts/src/headful.ts",
     "../../packages/contracts/src/headful-extensions.ts",
+    "../../packages/contracts/src/headful-utilities.ts",
+    "../../packages/headful-admin-utilities/src/web/**/*.ts",
+    "../../packages/headful-admin-utilities/src/web/**/*.tsx",
     "../../packages/contracts/src/headful-workspace/**/*.ts"
   ]
 }

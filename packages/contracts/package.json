@@ -27,6 +27,10 @@
       "types": "./src/headful-extensions.ts",
       "import": "./src/headful-extensions.ts"
     },
+    "./headful-utilities": {
+      "types": "./src/headful-utilities.ts",
+      "import": "./src/headful-utilities.ts"
+    },
     "./headful-workspace/*": {
       "types": "./src/headful-workspace/*.ts",
       "import": "./src/headful-workspace/*.ts"

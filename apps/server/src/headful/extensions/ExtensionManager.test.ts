@@ -8,7 +8,10 @@ import type {
   HeadfulExtensionContext,
   HeadfulExtensionDefinition,
 } from "../../../../../packages/contracts/src/headful-extensions.ts";
-import { headfulExtensionManifestSchema } from "../../../../../packages/contracts/src/headful-extensions.ts";
+import {
+  headfulExtensionManifestSchema,
+  resolveHeadfulContributions,
+} from "../../../../../packages/contracts/src/headful-extensions.ts";
 import { makeHeadfulRuntime, type HeadfulRuntime } from "../WorkspaceService.ts";
 import { CliAdapter } from "../SalesforceCli.ts";
 const desktop = { kind: "desktop" as const };
@@ -145,7 +148,7 @@ describe("trusted Headful extensions", () => {
     expect(c.session).not.toHaveBeenCalled();
     await expect(
       c.runtime.extensions.handleMcp(new Request("http://localhost/mcp")),
-    ).rejects.toMatchObject({ code: "plugin_missing" });
+    ).rejects.toMatchObject({ code: "extension_missing" });
   });
   it("activates independently, persists scoped settings and enablement, and disposes on disable", async () => {
     const first = fixture("insights"),
@@ -181,7 +184,7 @@ describe("trusted Headful extensions", () => {
         { id: "insights", values: { secret: "unexpected" } },
         desktop,
       ),
-    ).rejects.toMatchObject({ code: "plugin_setting_invalid" });
+    ).rejects.toMatchObject({ code: "extension_setting_invalid" });
     await c.runtime.dispatch("features.set", { id: "launch-at-login", enabled: true }, desktop);
     expect(first.state.hooks).toEqual(["launch-at-login:true"]);
     expect(
@@ -197,7 +200,7 @@ describe("trusted Headful extensions", () => {
         { id: "insights", command: "summary", input: { shell: "anything" } },
         desktop,
       ),
-    ).rejects.toMatchObject({ code: "plugin_command_input" });
+    ).rejects.toMatchObject({ code: "extension_command_input" });
     await c.runtime.close();
     const reopened = setup([first.definition, second.definition], c.folder);
     expect(
@@ -215,10 +218,10 @@ describe("trusted Headful extensions", () => {
         { id: "insights", surfaceId: "overview" },
         desktop,
       ),
-    ).rejects.toMatchObject({ code: "plugin_disabled" });
+    ).rejects.toMatchObject({ code: "extension_disabled" });
     await expect(
       first.state.context!.runtime.dispatch("status", {}, desktop),
-    ).rejects.toMatchObject({ code: "plugin_stopped" });
+    ).rejects.toMatchObject({ code: "extension_stopped" });
     expect(
       await reopened.runtime.extensions.dispatchDesktopIntegration("insights.recover", {}),
     ).toEqual({ recovered: true });
@@ -262,10 +265,10 @@ describe("trusted Headful extensions", () => {
     );
     await expect(
       c.runtime.dispatch("extensions.enable", { id: "future" }, desktop),
-    ).rejects.toMatchObject({ code: "plugin_incompatible" });
+    ).rejects.toMatchObject({ code: "extension_incompatible" });
     await expect(
       c.runtime.dispatch("extensions.enable", { id: "absent" }, desktop),
-    ).rejects.toMatchObject({ code: "plugin_missing" });
+    ).rejects.toMatchObject({ code: "extension_missing" });
     expect(incompatible.state.activated).toBe(0);
     expect(missing.state.activated).toBe(0);
     expect(
@@ -281,7 +284,7 @@ describe("trusted Headful extensions", () => {
     const port = first.state.context!.runtime;
     await expect(
       port.dispatch("reviewWorkflow" as never, {} as never, desktop),
-    ).rejects.toMatchObject({ code: "plugin_operation_denied" });
+    ).rejects.toMatchObject({ code: "extension_operation_denied" });
     await expect(
       port.dispatch("createUser" as never, {} as never, {
         kind: "mcp",
@@ -289,12 +292,161 @@ describe("trusted Headful extensions", () => {
         orgIds: [],
         scopes: ["headful:read", "headful:propose"],
       }),
-    ).rejects.toMatchObject({ code: "plugin_operation_denied" });
+    ).rejects.toMatchObject({ code: "extension_operation_denied" });
     await expect(port.dispatch("orgs.remove" as never, {} as never, desktop)).rejects.toMatchObject(
-      { code: "plugin_operation_denied" },
+      { code: "extension_operation_denied" },
     );
     expect("close" in port).toBe(false);
     expect(c.session).not.toHaveBeenCalled();
+  });
+  it("requires a narrow utility capability before invoking the CLI runtime port", async () => {
+    const first = fixture("insights", { defaultEnabled: true });
+    const c = setup([first.definition]);
+    await c.runtime.dispatch("status", {}, desktop);
+    await expect(
+      first.state.context!.runtime.dispatch(
+        "utilities.query.run",
+        {
+          orgId: "org_123456789012345",
+          requestId: "request_12345",
+          query: "SELECT Id FROM Account",
+        },
+        desktop,
+      ),
+    ).rejects.toMatchObject({ code: "extension_permission_missing" });
+    await expect(
+      first.state.context!.runtime.dispatch(
+        "utilities.org.open",
+        {
+          orgId: "org_123456789012345",
+          destination: "setup",
+        },
+        desktop,
+      ),
+    ).rejects.toMatchObject({ code: "extension_permission_missing" });
+    expect(c.session).not.toHaveBeenCalled();
+  });
+  it("keeps disabled-state recovery limited to local cleanup and native metadata", async () => {
+    const subject = fixture("insights");
+    const definition: HeadfulExtensionDefinition = {
+      ...subject.definition,
+      async recover(context) {
+        await expect(
+          context.runtime.dispatch(
+            "utilities.query.run",
+            {
+              orgId: "org_123456789012345",
+              requestId: "request_12345",
+              query: "SELECT Id FROM Account",
+            },
+            desktop,
+          ),
+        ).rejects.toMatchObject({ code: "extension_operation_denied" });
+        await expect(
+          context.runtime.dispatch("prepareUserCreation", {} as never, {
+            kind: "mcp",
+            clientId: "fixture_client_12345",
+            orgIds: [],
+            scopes: ["headful:read", "headful:propose"],
+          }),
+        ).rejects.toMatchObject({ code: "extension_operation_denied" });
+        expect((await context.runtime.dispatch("status", {}, desktop)).local).toBe(true);
+        return { recovered: true };
+      },
+    };
+    const c = setup([definition]);
+    expect(await c.runtime.extensions.dispatchDesktopIntegration("insights.recover", {})).toEqual({
+      recovered: true,
+    });
+    expect(c.session).not.toHaveBeenCalled();
+  });
+  it("resolves namespaced native contributions from current features and extension lifecycle", async () => {
+    const subject = fixture("insights", { defaultEnabled: true });
+    const definition: HeadfulExtensionDefinition = {
+      ...subject.definition,
+      manifest: {
+        ...subject.definition.manifest,
+        contributions: {
+          ...subject.definition.manifest.contributions,
+          components: [
+            { id: "insights/reports", kind: "panel" },
+            { id: "insights/search", kind: "header-control" },
+          ],
+          navigation: [
+            {
+              id: "insights/reports",
+              name: "Reports",
+              componentId: "insights/reports",
+              requiredFeatures: ["insights/reports"],
+            },
+          ],
+          panels: [
+            {
+              id: "insights/reports",
+              name: "Reports",
+              componentId: "insights/reports",
+              workspaceIds: ["insights/reports"],
+              requiredFeatures: ["insights/reports"],
+            },
+          ],
+          headerControls: [
+            {
+              id: "insights/search",
+              name: "Search",
+              componentId: "insights/search",
+              requiredFeatures: ["insights/reports"],
+            },
+          ],
+          commands: [
+            {
+              id: "insights/summary",
+              name: "Summary",
+              description: "Read status.",
+              parameters: [],
+              requiredFeatures: ["insights/reports"],
+            },
+          ],
+          actions: [
+            {
+              id: "insights/summary",
+              name: "Summary",
+              commandId: "insights/summary",
+              requiredFeatures: ["insights/reports"],
+            },
+          ],
+        },
+      },
+    };
+    const c = setup([definition]);
+    const status = await c.runtime.dispatch("status", {}, desktop);
+    const first = await c.runtime.dispatch("extensions.list", {}, desktop);
+    const native = resolveHeadfulContributions(first.extensions, status.features);
+    expect(native.navigation[0]).toMatchObject({
+      available: true,
+      contribution: { componentId: "insights/reports" },
+    });
+    expect(native.headerControls[0]?.available).toBe(true);
+    expect(native.actions[0]?.available).toBe(true);
+    await c.runtime.dispatch("features.set", { id: "insights/reports", enabled: false }, desktop);
+    const changed = await c.runtime.dispatch("status", {}, desktop);
+    const hidden = resolveHeadfulContributions(first.extensions, changed.features);
+    expect(hidden.navigation[0]).toMatchObject({
+      available: false,
+      unavailableReason: "Enable insights/reports in Headful settings.",
+    });
+    expect(hidden.headerControls[0]?.available).toBe(false);
+    await expect(
+      c.runtime.dispatch(
+        "extensions.command",
+        { id: "insights", command: "insights/summary", input: {} },
+        desktop,
+      ),
+    ).rejects.toMatchObject({ code: "feature_disabled" });
+    await c.runtime.dispatch("extensions.disable", { id: "insights" }, desktop);
+    const disabled = await c.runtime.dispatch("extensions.list", {}, desktop);
+    expect(
+      resolveHeadfulContributions(disabled.extensions, changed.features).panels[0],
+    ).toMatchObject({ available: false, unavailableReason: "Fixture insights is disabled." });
   });
   it("stops MCP exposure and lifecycle work when a required contributed feature is disabled", async () => {
     const subject = fixture("insights", { defaultEnabled: true });
@@ -332,7 +484,7 @@ describe("trusted Headful extensions", () => {
     expect(subject.state.context?.signal.aborted).toBe(true);
     await expect(
       c.runtime.extensions.handleMcp(new Request("http://localhost/mcp")),
-    ).rejects.toMatchObject({ code: "plugin_disabled" });
+    ).rejects.toMatchObject({ code: "extension_disabled" });
     expect(handle).toHaveBeenCalledTimes(1);
     expect(
       (await c.runtime.dispatch("extensions.inspect", { id: "insights" }, desktop)).status,
@@ -348,6 +500,44 @@ describe("trusted Headful extensions", () => {
         contributions: {
           skills: [{ id: "unsafe", name: "Unsafe", description: "", path: "./../secret" }],
         },
+      }).success,
+    ).toBe(false);
+  });
+  it("rejects cross-extension IDs and undeclared or mismatched native component references", () => {
+    const sample = fixture("insights").definition.manifest;
+    const components = [{ id: "insights/reports", kind: "panel" }];
+    expect(
+      headfulExtensionManifestSchema.safeParse({
+        ...sample,
+        contributions: {
+          components,
+          navigation: [{ id: "other/reports", name: "Reports", componentId: "insights/reports" }],
+        },
+      }).success,
+    ).toBe(false);
+    expect(
+      headfulExtensionManifestSchema.safeParse({
+        ...sample,
+        contributions: {
+          components,
+          headerControls: [
+            { id: "insights/search", name: "Search", componentId: "insights/reports" },
+          ],
+        },
+      }).success,
+    ).toBe(false);
+    expect(
+      headfulExtensionManifestSchema.safeParse({
+        ...sample,
+        contributions: {
+          actions: [{ id: "insights/execute", name: "Execute", commandId: "insights/undeclared" }],
+        },
+      }).success,
+    ).toBe(false);
+    expect(
+      headfulExtensionManifestSchema.safeParse({
+        ...sample,
+        entryPoints: { server: "./../private.js" },
       }).success,
     ).toBe(false);
   });

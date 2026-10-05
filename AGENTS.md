@@ -6,6 +6,14 @@ Use scoped Headful commands and focused tests. Core onboarding needs Salesforce 
 
 The user explicitly authorizes parallel agents, browser/app inspection needed for focused verification, Mac packaging, committing/pushing this fork and updating the separately maintained Headful website. Do not modify HelloMCP or message unrelated tasks.
 
+## Pre-release greenfield policy
+
+Headful is an unreleased greenfield product until the user explicitly declares its first official release. Ship one coherent current beta; do not accumulate technical debt to preserve earlier beta behavior. When the design changes, remove superseded code paths, temporary compatibility shims, dependencies and stale instructions in the same change. Update the current documentation rather than appending competing implementation or release histories.
+
+Keep only the current requested application and distribution artifact. Earlier beta ZIPs are not rollback artifacts and must be removed once superseded. Remove task-owned disposable builds, caches, scratch files and obsolete QA material after verification and preview use end. Keep focused evidence of the current deliverable without creating a permanent archive for each iteration.
+
+This policy does not authorize deleting unique user data, credentials, source, legal notices, the preserved T3 fork history, apps/mobile or shared client architecture. Respect running processes and other tasks' work. Preserve required local compiled extension outputs. Do not add migrations or compatibility layers for disposable beta fixtures; protect real user state when a change actually requires it. Revisit version support and rollback retention only when an official release makes those commitments necessary.
+
 The following retained upstream instructions guide architecture where applicable. Headful's product scope above takes precedence.
 
 # T3 Code

@@ -14,6 +14,7 @@ const registrySchema = z.strictObject({
     .array(
       z.strictObject({
         packageName: z.string().regex(/^@headfulcloud\/[a-z0-9-]+$/),
+        optional: z.boolean().default(false),
       }),
     )
     .max(50),
@@ -42,6 +43,21 @@ export async function loadInstalledExtensions(): Promise<HeadfulExtensionDefinit
     if (packages.has(registration.packageName))
       throw new Error("Duplicate Headful extension registration.");
     packages.add(registration.packageName);
+    // Optional registrations are absent from clean public installs. Resolve the
+    // package itself first: an installed package with a broken manifest still
+    // fails closed rather than silently disappearing.
+    try {
+      require.resolve(`${registration.packageName}/package.json`);
+    } catch (error) {
+      if (
+        registration.optional &&
+        error instanceof Error &&
+        "code" in error &&
+        error.code === "MODULE_NOT_FOUND"
+      )
+        continue;
+      throw error;
+    }
     const manifestFile = require.resolve(`${registration.packageName}/manifest`);
     const manifest = headfulExtensionManifestSchema.parse(
       JSON.parse(await readFile(manifestFile, "utf8")),

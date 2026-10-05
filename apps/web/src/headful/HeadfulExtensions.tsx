@@ -148,6 +148,26 @@ export function HeadfulExtensions({
           const { contributions } = manifest;
           const groups = [
             {
+              name: "Navigation",
+              values: contributions.navigation.map(
+                (value) => `${value.name} · ${value.componentId}`,
+              ),
+            },
+            {
+              name: "Header controls",
+              values: contributions.headerControls.map(
+                (value) => `${value.name} · ${value.placement}`,
+              ),
+            },
+            {
+              name: "Panels",
+              values: contributions.panels.map((value) => `${value.name} · ${value.componentId}`),
+            },
+            {
+              name: "Actions",
+              values: contributions.actions.map((value) => `${value.name} · ${value.commandId}`),
+            },
+            {
               name: "Features",
               values: contributions.features.map((value) => `${value.name} · ${value.id}`),
             },
@@ -226,7 +246,10 @@ export function HeadfulExtensions({
                 <div>
                   <dt>Source</dt>
                   <dd>
-                    {manifest.source === "bundled" ? "Bundled with this app" : manifest.source}
+                    {manifest.sourceClassification === "proprietary"
+                      ? "Proprietary integration"
+                      : "Open-source extension"}{" "}
+                    · {manifest.source === "bundled" ? "Bundled with this app" : manifest.source}
                   </dd>
                 </div>
                 <div>

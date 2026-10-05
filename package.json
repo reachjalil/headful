@@ -54,7 +54,8 @@
     "headful:test": "node scripts/headful.ts test",
     "headful:package": "node scripts/headful.ts package",
     "headful:upstream": "node scripts/headful-upstream.mjs",
-    "headful:setup": "pnpm --filter @t3tools/desktop... --filter t3... --filter @t3tools/scripts install"
+    "headful:setup": "node scripts/headful.ts setup",
+    "headful:extensions": "node scripts/headful-extensions.mjs"
   },
   "devDependencies": {
     "@effect/tsgo": "catalog:",

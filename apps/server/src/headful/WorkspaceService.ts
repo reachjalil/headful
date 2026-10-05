@@ -7,6 +7,7 @@ import * as Store from "./Store.ts";
 import * as SalesforceCli from "./SalesforceCli.ts";
 import * as OrgService from "./OrgService.ts";
 import * as FeatureService from "./FeatureService.ts";
+import * as UtilityService from "./UtilityService.ts";
 import * as ExtensionService from "./extensions/ExtensionManager.ts";
 import type {
   HeadfulExtensionDefinition,
@@ -73,6 +74,7 @@ export function makeHeadfulRuntime(options: {
   const orgs = new OrgService.OrgManager(store, cli),
     features = new FeatureService.FeatureManager(store);
   const env: Env = { DB: store, cli };
+  const utilities = new UtilityService.UtilityManager(store, cli, features);
   let closed = false;
   let closing: Promise<void> | undefined;
   // Extension lifecycle hooks already run inside the manager's serialized queue.
@@ -87,6 +89,7 @@ export function makeHeadfulRuntime(options: {
     definitions: options.extensions ?? [],
   });
   const handlers: Handlers = {
+    ...utilities.handlers,
     "extensions.list": async (_, p) => {
       desktopOnly(p);
       return extensions.list();
@@ -101,7 +104,9 @@ export function makeHeadfulRuntime(options: {
     },
     "extensions.disable": async (i, p) => {
       desktopOnly(p);
-      return extensions.disable(i.id);
+      const disabling = extensions.disable(i.id);
+      utilities.cancelUnavailable();
+      return disabling;
     },
     "extensions.settings": async (i, p) => {
       desktopOnly(p);
@@ -215,6 +220,7 @@ export function makeHeadfulRuntime(options: {
     "features.set": async (i, p) => {
       desktopOnly(p);
       features.set(i.id, i.enabled);
+      utilities.cancelUnavailable();
       await extensions.featureChanged(i.id, i.enabled);
       return features.list();
     },
@@ -419,6 +425,10 @@ export function makeHeadfulRuntime(options: {
               "headful:users",
               "headful:access",
               "headful:permissions",
+              "headful:inspect",
+              "headful:query",
+              "headful:schema",
+              "headful:diagnostics",
             ]
           : (authority.scopes ?? []),
       ...(authority.clientId ? { grantId: authority.clientId } : {}),
@@ -453,6 +463,7 @@ export function makeHeadfulRuntime(options: {
     close: () => {
       if (closing) return closing;
       closed = true;
+      utilities.close();
       cli.close();
       closing = extensions.close().finally(() => store.close());
       return closing;

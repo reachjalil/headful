@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { resolve, join } from "node:path";
+import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { resolveHeadfulExtensionPackage } from "./lib/headful-extension-package.ts";
+import { resolveHeadfulExtensionPackages } from "./lib/headful-extension-package.ts";
 const root = fileURLToPath(new URL("..", import.meta.url));
 if (process.platform !== "darwin")
   throw new Error(
@@ -41,16 +41,38 @@ async function run(command: string, args: string[]) {
   });
 }
 const pnpm = "pnpm";
-if (mode === "dev" || mode === "package") {
-  const installed = resolveHeadfulExtensionPackage(root);
-  const { getMcpAppsAssets } = await import(pathToFileURL(installed.entry).href);
-  const assets = getMcpAppsAssets();
-  Object.assign(env, {
-    HEADFUL_MCP_BRIDGE: assets.bridgeScript,
-    HEADFUL_MCP_ASSETS: assets.assetsDirectory,
-  });
+if (mode === "setup") {
+  await run(pnpm, [
+    "--filter",
+    "@t3tools/desktop...",
+    "--filter",
+    "t3...",
+    "--filter",
+    "@t3tools/scripts",
+    "install",
+  ]);
 }
-if (mode === "dev") {
+if (["setup", "dev", "check", "package"].includes(mode ?? "")) {
+  await run(pnpm, ["--filter", "@headfulcloud/admin-utilities", "run", "build"]);
+}
+if (mode === "dev" || mode === "package") {
+  const installed = resolveHeadfulExtensionPackages(root).find(
+    (extension) => extension.packageName === "@headfulcloud/mcp-apps",
+  );
+  if (installed) {
+    const { getMcpAppsAssets } = await import(pathToFileURL(installed.entry).href);
+    const assets = getMcpAppsAssets();
+    Object.assign(env, {
+      HEADFUL_MCP_BRIDGE: assets.bridgeScript,
+      HEADFUL_MCP_ASSETS: assets.assetsDirectory,
+    });
+  }
+}
+if (mode === "setup") {
+  console.log(
+    "Open-source Headful is ready. Optional private Extensions can be linked separately.",
+  );
+} else if (mode === "dev") {
   await run(process.execPath, ["scripts/build-headful-icons.ts"]);
   await run(pnpm, ["dev:desktop", "--home-dir", env.HEADFUL_HOME]);
 } else if (mode === "check") {
@@ -65,7 +87,9 @@ if (mode === "dev") {
     "run",
     "apps/server/src/headful",
     "apps/desktop/src/headful",
-    "apps/web/src/headful/chat-context.test.ts",
+    "apps/web/src/headful",
+    "scripts/lib/headful-extension-package.test.ts",
+    "packages/headful-admin-utilities",
   ]);
 } else if (mode === "package") {
   if (process.arch !== "arm64")
@@ -80,9 +104,12 @@ if (mode === "dev") {
     "--target",
     "zip",
     "--build-version",
-    "0.1.0",
+    "0.2.0",
     "--output-dir",
     resolve(root, "artifacts/headful"),
     ...process.argv.slice(3),
   ]);
-} else throw new Error("Use pnpm headful:dev, headful:check, headful:test, or headful:package.");
+} else
+  throw new Error(
+    "Use pnpm headful:setup, headful:dev, headful:check, headful:test, or headful:package.",
+  );

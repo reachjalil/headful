@@ -529,9 +529,9 @@ importers:
       '@ff-labs/fff-node':
         specifier: 0.9.4
         version: 0.9.4(patch_hash=c4e3cc2420ceb9dc650f9d189e9c24baf7e83f342998bacda5f459a4ce7927a8)
-      '@headfulcloud/mcp-apps':
-        specifier: link:../../../headfulCloud/packages/mcp-apps
-        version: link:../../../headfulCloud/packages/mcp-apps
+      '@headfulcloud/admin-utilities':
+        specifier: workspace:*
+        version: link:../../packages/headful-admin-utilities
       '@napi-rs/keyring':
         specifier: ^1.3.0
         version: 1.3.0
@@ -647,6 +647,9 @@ importers:
       '@formkit/auto-animate':
         specifier: ^0.9.0
         version: 0.9.0
+      '@headfulcloud/admin-utilities':
+        specifier: workspace:*
+        version: link:../../packages/headful-admin-utilities
       '@legendapp/list':
         specifier: 'catalog:'
         version: 3.3.5(patch_hash=680cc6a5c5b4a4032e467e7b3fde22f89a84c0ee2e6eac6fda737d6277cc0806)(react-dom@19.2.6(react@19.2.6))(react-native@0.88.0-rc.3(@babel/core@7.29.7)(@react-native/metro-config@0.88.0-rc.3(@babel/core@7.29.7)(bufferutil@4.1.0)(utf-8-validate@6.0.6))(@types/react@19.3.0)(bufferutil@4.1.0)(react@19.2.6)(utf-8-validate@6.0.6))(react@19.2.6)
@@ -1014,6 +1017,33 @@ importers:
       vite-plus:
         specifier: 'catalog:'
         version: 1.0.0(@types/node@24.12.4)(@vitest/ui@5.0.1)(bufferutil@4.1.0)(esbuild@0.28.2)(jiti@2.7.0)(jsdom@30.1.0(@noble/hashes@1.8.0))(msw@2.12.11(@types/node@24.12.4)(typescript@7.0.2))(terser@5.48.0)(typescript@7.0.2)(unrun@0.2.39)(utf-8-validate@6.0.6)(yaml@2.9.0)
+
+  packages/headful-admin-utilities:
+    devDependencies:
+      '@t3tools/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@types/node':
+        specifier: 24.12.4
+        version: 24.12.4
+      '@types/react':
+        specifier: ~19.3.0
+        version: 19.3.0
+      esbuild:
+        specifier: 0.28.2
+        version: 0.28.2
+      react:
+        specifier: 19.2.6
+        version: 19.2.6
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vite-plus:
+        specifier: 'catalog:'
+        version: 1.0.0(@types/node@24.12.4)(@vitest/ui@5.0.1)(bufferutil@4.1.0)(esbuild@0.28.2)(jiti@2.7.0)(jsdom@30.1.0(@noble/hashes@1.8.0))(msw@2.12.11(@types/node@24.12.4)(typescript@7.0.2))(terser@5.48.0)(typescript@7.0.2)(unrun@0.2.39)(utf-8-validate@6.0.6)(yaml@2.9.0)
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
 
   packages/shared:
     dependencies:

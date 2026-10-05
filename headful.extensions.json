@@ -1,4 +1,7 @@
 {
   "schemaVersion": 1,
-  "extensions": [{ "packageName": "@headfulcloud/mcp-apps" }]
+  "extensions": [
+    { "packageName": "@headfulcloud/admin-utilities" },
+    { "packageName": "@headfulcloud/mcp-apps", "optional": true }
+  ]
 }

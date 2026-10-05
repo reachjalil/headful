@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { headfulUtilityInputSchemas, headfulUtilityResultSchemas } from "./headful-utilities.ts";
 import {
   extensionFeatureIdSchema,
   headfulExtensionInputSchemas,
@@ -28,6 +29,7 @@ const empty = z.strictObject({}),
   workflow = z.strictObject({ workflowId: identifier });
 const search = z.string().trim().max(100).default("");
 export const headfulInputSchemas = {
+  ...headfulUtilityInputSchemas,
   ...headfulExtensionInputSchemas,
   status: empty,
   "cli.detect": empty,
@@ -202,6 +204,7 @@ const cliDetectionSchema = z.strictObject({
   legacyDetected: z.boolean(),
 });
 export const headfulResultSchemas = {
+  ...headfulUtilityResultSchemas,
   ...headfulExtensionResultSchemas,
   status: managedOrgsSchema.extend({
     ...featuresSchema.shape,
