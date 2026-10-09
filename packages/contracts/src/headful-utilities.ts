@@ -33,6 +33,7 @@ export const workspacePreferencesSchema = z.strictObject({
     .refine((values) => Object.keys(values).length <= 50, "Use at most 50 workspace overrides."),
 });
 export const headfulUtilityInputSchemas = {
+  "utilities.backup.location": z.strictObject({ orgId: identifier }),
   "utilities.record.get": z.strictObject({
     orgId: identifier,
     object: utilityApiNameSchema,
@@ -148,6 +149,7 @@ const logSchema = z.strictObject({
   userId: sfId.nullable(),
 });
 export const headfulUtilityResultSchemas = {
+  "utilities.backup.location": z.strictObject({ url: z.url().refine((value) => { const url = new URL(value); return url.origin === "https://headful.cloud" && url.pathname === "/backup"; }), executor: z.literal("cloud"), cloudAuthorization: z.literal("required") }),
   "utilities.record.get": z.strictObject({
     org: orgSchema,
     object: utilityApiNameSchema,
@@ -269,6 +271,7 @@ export const headfulUtilityResultSchemas = {
 } as const;
 export type HeadfulUtilityOperation = keyof typeof headfulUtilityInputSchemas;
 export const utilityOperationPolicies = {
+  "utilities.backup.location": { feature: "headful.admin-utilities/backup", permission: "salesforce:org-navigation", scope: "headful:read", desktopOnly: true },
   "utilities.record.get": {
     feature: "admin-utilities/record-inspector",
     permission: "salesforce:records",

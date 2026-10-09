@@ -132,6 +132,12 @@ export class UtilityManager {
     this.cli = cli;
     this.features = features;
     this.handlers = {
+      "utilities.backup.location": async (i, p) => {
+        const org = await this.verified(i.orgId, p);
+        const url = new URL("https://headful.cloud/backup");
+        url.searchParams.set("sourceOrg", org.salesforce_org_id);
+        return { url: url.toString(), executor: "cloud", cloudAuthorization: "required" };
+      },
       "utilities.record.get": async (i, p) => {
         const org = await this.verified(i.orgId, p),
           describe = rawDescribe.parse(await this.cli.utilityDescribe(org.username, i.object));
