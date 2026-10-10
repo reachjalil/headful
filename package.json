@@ -61,7 +61,8 @@
     "headful:upstream": "node scripts/headful-upstream.mjs",
     "headful:setup": "node scripts/headful.ts setup",
     "headful:mods": "node scripts/headful-mods.mjs",
-    "headful:mods:journey": "node scripts/headful-mod-journey.mjs"
+    "headful:mods:journey": "node scripts/headful-mod-journey.mjs",
+    "headful:agent:policy": "node scripts/headful-native-policy-journey.mjs"
   },
   "devDependencies": {
     "@effect/tsgo": "catalog:",

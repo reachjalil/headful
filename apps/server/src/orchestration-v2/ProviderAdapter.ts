@@ -51,6 +51,13 @@ export const ProviderAdapterV2RuntimePolicy = Schema.Struct({
   approvalPolicy: Schema.optional(Schema.Unknown),
   sandboxPolicy: Schema.optional(Schema.Unknown),
   reasoningEffort: Schema.optional(Schema.String),
+  nativeAgent: Schema.optional(
+    Schema.Struct({
+      expiresAt: Schema.Number,
+      config: Schema.Record(Schema.String, Schema.Json),
+      toolNames: Schema.Array(Schema.String),
+    }),
+  ),
 });
 export type ProviderAdapterV2RuntimePolicy = typeof ProviderAdapterV2RuntimePolicy.Type;
 

@@ -18,6 +18,8 @@ import type { ProviderInstance } from "../provider/ProviderDriver.ts";
 import * as ProviderInstanceRegistry from "../provider/Services/ProviderInstanceRegistry.ts";
 import * as ProjectStore from "./ProjectStore.ts";
 import * as RuntimePolicy from "./RuntimePolicy.ts";
+import { installAgentBoundaryResolver } from "../headful/AgentBoundary.ts";
+import type { HeadfulAgentBoundary } from "../../../../packages/contracts/src/headful-agent.ts";
 
 const projectId = ProjectId.make("project:runtime-policy");
 const providerInstanceId = ProviderInstanceId.make("codex");
@@ -69,6 +71,7 @@ const supportedRuntimeModesByInstance = new Map<ProviderInstanceId, ReadonlyArra
 ]);
 const providerInstanceFor = (instanceId: ProviderInstanceId) =>
   ({
+    driverKind: instanceId === grokInstanceId ? "grok" : "codex",
     snapshot: {
       getSnapshot: Effect.succeed({
         supportedRuntimeModes: supportedRuntimeModesByInstance.get(instanceId),
@@ -110,6 +113,96 @@ const TestLayer = RuntimePolicy.layerFromProjectStore.pipe(
 );
 
 it.layer(TestLayer)("RuntimePolicyV2", (it) => {
+  it.effect("fails closed for a reserved native thread without its native authority", () =>
+    Effect.gen(function* () {
+      const policy = yield* RuntimePolicy.RuntimePolicyV2,
+        now = yield* DateTime.now;
+      const thread = {
+        ...makeThread({ now, worktreePath: null }),
+        id: ThreadId.make("headful-agent-synthetic123456789"),
+      };
+      const result = yield* Effect.result(policy.resolve({ thread, modelSelection }));
+      assert.equal(result._tag, "Failure");
+    }),
+  );
+  it.effect(
+    "pins native runner permissions and refuses project/provider retargeting or a global override",
+    () =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const now = yield* DateTime.now;
+          const thread = {
+            ...makeThread({ now, worktreePath: "/caller-worktree" }),
+            id: ThreadId.make("headful-agent-synthetic123456789"),
+          };
+          const boundary: HeadfulAgentBoundary = {
+            ownerModId: "headful.connect-desktop",
+            threadId: thread.id,
+            projectId,
+            providerInstanceId,
+            model: modelSelection.model,
+            expiresAt: 1_000_000,
+            workspace: "/native-isolated-workspace",
+            mcp: {
+              endpoint: "http://127.0.0.1:12345/runs/synthetic",
+              authorization: "Bearer synthetic-native-broker",
+              tools: ["list_orgs"],
+            },
+            revokedAt: null,
+          };
+          yield* Effect.acquireRelease(
+            Effect.sync(() =>
+              installAgentBoundaryResolver(
+                () => boundary,
+                () => 1,
+              ),
+            ),
+            (release) => Effect.sync(release),
+          );
+          const policy = yield* RuntimePolicy.RuntimePolicyV2;
+          const resolved = yield* policy.resolve({ thread, modelSelection });
+          assert.equal(resolved.cwd, boundary.workspace);
+          assert.equal(resolved.approvalPolicy, "never");
+          const profileId = "headful_admin_" + boundary.threadId.replaceAll("-", "_");
+          assert.equal(resolved.nativeAgent?.config.default_permissions, profileId);
+          assert.deepEqual(resolved.nativeAgent?.config.permissions, {
+            [profileId]: {
+              description: "Headful bounded native Admin work",
+              filesystem: { ":minimal": "read", [boundary.workspace]: "read" },
+              network: { enabled: false },
+            },
+          });
+          assert.equal(resolved.nativeAgent?.config.project_doc_max_bytes, 0);
+          assert.equal(resolved.nativeAgent?.config["features.shell_tool"], false);
+          const overridden = yield* Effect.gen(function* () {
+            return yield* (yield* RuntimePolicy.RuntimePolicyV2).resolve({
+              thread,
+              modelSelection,
+            });
+          }).pipe(
+            Effect.provide(
+              RuntimePolicy.layerWithOverride({
+                cwd: "/outside",
+                sandboxPolicy: { type: "dangerFullAccess" },
+              }),
+            ),
+          );
+          assert.deepEqual(overridden, resolved);
+          const retargeted = yield* Effect.result(
+            policy.resolve({
+              thread: { ...thread, projectId: ProjectId.make("other-project") },
+              modelSelection,
+            }),
+          );
+          assert.equal(retargeted._tag, "Failure");
+          boundary.revokedAt = 1;
+          assert.equal(
+            (yield* Effect.result(policy.resolve({ thread, modelSelection })))._tag,
+            "Failure",
+          );
+        }),
+      ),
+  );
   it.effect("uses the project root for local-checkout threads", () =>
     Effect.gen(function* () {
       const policy = yield* RuntimePolicy.RuntimePolicyV2;

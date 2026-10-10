@@ -1,3 +1,4 @@
+import * as AgentRunner from "./AgentRunner.ts";
 import type { HeadfulAgentRunnerFactory } from "../../../../packages/contracts/src/headful-agent.ts";
 // @effect-diagnostics nodeBuiltinImport:off preferSchemaOverJson:off
 // Headful is one scoped service in the existing T3 server process. Transports
@@ -395,13 +396,17 @@ export async function startRuntimeHost(
 }
 const make = Effect.gen(function* () {
   const config = yield* ServerConfig.ServerConfig;
+  const runner = yield* AgentRunner.AgentRunner;
   const host = yield* Effect.acquireRelease(
     Effect.tryPromise({
-      try: () => startRuntimeHost(NodePath.join(config.stateDir, "headful")),
+      try: () =>
+        startRuntimeHost(NodePath.join(config.stateDir, "headful"), {
+          agentRunner: runner.factory,
+        }),
       catch: (cause) => new HeadfulHostError({ cause }),
     }),
     (host) => Effect.promise(host.close),
   );
   return RuntimeHost.of({ origin: host.origin });
 });
-export const layer = Layer.effect(RuntimeHost, make);
+export const layer = Layer.effect(RuntimeHost, make).pipe(Layer.provide(AgentRunner.layer));

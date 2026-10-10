@@ -1,3 +1,4 @@
+import { nativeAgentBoundary } from "../headful/AgentBoundary.ts";
 import * as WorktreeSetupTracker from "../project/WorktreeSetupTracker.ts";
 import * as ProjectCloneTracker from "../project/ProjectCloneTracker.ts";
 import * as TerminalManager from "../terminal/Manager.ts";
@@ -463,27 +464,29 @@ const make = Effect.gen(function* () {
           .pipe(Effect.mapError(mapError(input, "update-thread", threadId)));
       }
       yield* setupTracker.stageStatus(threadId, "setup-script", "running");
-      const setup = yield* setupScripts
-        .runForThread({
-          threadId,
-          projectId: input.projectId,
-          projectCwd: project.workspaceRoot,
-          worktreePath: cwd,
-          ...(tracked
-            ? {
-                observeCompletion: {
-                  onOutputLine: (line: string) =>
-                    setupTracker.appendTail(threadId, "setup-script", line),
-                },
-              }
-            : {}),
-          project: {
-            id: project.id,
-            workspaceRoot: project.workspaceRoot,
-            scripts: project.scripts,
-          },
-        })
-        .pipe(Effect.mapError(mapError(input, "run-setup-script", threadId)));
+      const setup = yield* nativeAgentBoundary(threadId)
+        ? Effect.succeed({ status: "skipped" as const })
+        : setupScripts
+            .runForThread({
+              threadId,
+              projectId: input.projectId,
+              projectCwd: project.workspaceRoot,
+              worktreePath: cwd,
+              ...(tracked
+                ? {
+                    observeCompletion: {
+                      onOutputLine: (line: string) =>
+                        setupTracker.appendTail(threadId, "setup-script", line),
+                    },
+                  }
+                : {}),
+              project: {
+                id: project.id,
+                workspaceRoot: project.workspaceRoot,
+                scripts: project.scripts,
+              },
+            })
+            .pipe(Effect.mapError(mapError(input, "run-setup-script", threadId)));
 
       let awaitAsyncSetup = Effect.void;
       if (setup.status === "started") {

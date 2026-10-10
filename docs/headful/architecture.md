@@ -40,4 +40,4 @@ The mod host, manifest/SDK, installer, sandbox, native service authority and rev
 
 Private mod source, planning, user data, Salesforce credentials, cloud deployment secrets and local state must stay out of public commits and artifacts.
 
-Backups and restore are planned as a separate proprietary Mod. This slice provides no backup, restore, metadata deployment, bulk import, or unrestricted automation capability.
+The workspace's Backup & Recovery contribution opens a fixed cloud destination after checking the native identity. Cloud authentication, storage and recovery authority remain separate. Local mod contributions can expose additional designed experiences, but this public desktop does not perform backup, restore, metadata deployment, bulk import or unrestricted automation merely by mounting a contribution. See [current release scope](release-scope.md).

@@ -1,3 +1,8 @@
+import * as Clock from "effect/Clock";
+import {
+  assertNativeAgentSession,
+  assertNativeAgentInventory,
+} from "../../headful/NativeAgentPolicy.ts";
 import { revertCodexThread } from "../../provider/CodexThreadRevert.ts";
 import { historyResponseItems } from "../ContextHandoffBudget.ts";
 import { makeProviderTextDeltaCoalescer } from "./ProviderTextDeltaCoalescer.ts";
@@ -710,8 +715,9 @@ export function buildCodexTurnStartParams(input: {
       input.runtimePolicy.approvalPolicy === undefined
         ? runtimeModeDefaults.approvalPolicy
         : yield* decodeTurnApprovalPolicy(input.runtimePolicy.approvalPolicy);
-    const sandboxPolicy =
-      input.runtimePolicy.sandboxPolicy === undefined
+    const sandboxPolicy = input.runtimePolicy.nativeAgent
+      ? undefined
+      : input.runtimePolicy.sandboxPolicy === undefined
         ? runtimeModeDefaults.sandboxPolicy
         : yield* decodeTurnSandboxPolicy(input.runtimePolicy.sandboxPolicy);
     const selectedEffort = getModelSelectionStringOptionValue(
@@ -725,11 +731,11 @@ export function buildCodexTurnStartParams(input: {
         ? undefined
         : getCodexServiceTierOptionValue(input.modelSelection);
     const developerInstructions =
-      input.hasT3Mcp !== true
+      input.runtimePolicy.nativeAgent || input.hasT3Mcp !== true
         ? undefined
         : buildCodexDeveloperInstructions(input.runtimePolicy.interactionMode);
     const additionalContext =
-      input.hasT3Mcp === true
+      !input.runtimePolicy.nativeAgent && input.hasT3Mcp === true
         ? buildCodexAdditionalContext(
             { model: input.modelSelection.model, reasoningEffort: effort ?? "medium" },
             {
@@ -1204,15 +1210,18 @@ export function codexThreadRuntimeParams(input: {
   readonly cwd?: string;
   readonly model?: string;
   readonly config: Readonly<Record<string, Schema.Json>>;
+  readonly approvalPolicy?: "never";
 } {
   const mcpSession =
     input.threadId === null ? undefined : McpProviderSession.readMcpProviderSession(input.threadId);
   return {
+    ...(input.runtimePolicy?.nativeAgent ? { approvalPolicy: "never" as const } : {}),
     ...(input.runtimePolicy?.cwd == null ? {} : { cwd: input.runtimePolicy.cwd }),
     ...(input.modelSelection === undefined ? {} : { model: input.modelSelection.model }),
     config: {
       ...CODEX_THREAD_CONFIG,
-      ...(mcpSession === undefined
+      ...input.runtimePolicy?.nativeAgent?.config,
+      ...(input.runtimePolicy?.nativeAgent || mcpSession === undefined
         ? {}
         : {
             mcp_servers: {
@@ -5398,14 +5407,23 @@ export function makeCodexAdapterV2(adapterOptions: CodexAdapterV2Options): Provi
           ensureThread: (threadInput) =>
             ensureInitialized.pipe(
               Effect.andThen(
-                client.request(
-                  "thread/start",
-                  codexThreadRuntimeParams({
+                (() => {
+                  const params = codexThreadRuntimeParams({
                     threadId: threadInput.threadId,
                     modelSelection: threadInput.modelSelection,
                     runtimePolicy: threadInput.runtimePolicy,
-                  }),
-                ),
+                  });
+                  return threadInput.runtimePolicy?.nativeAgent
+                    ? client.raw.request("thread/start", params).pipe(
+                        Effect.tap((response) =>
+                          Effect.try(() => assertNativeAgentSession(response, params)),
+                        ),
+                        Effect.flatMap(
+                          Schema.decodeUnknownEffect(CodexSchema.V2ThreadStartResponse),
+                        ),
+                      )
+                    : client.request("thread/start", params);
+                })(),
               ),
               Effect.map((response): OrchestrationV2ProviderThread =>
                 providerThreadFromCodexThread({
@@ -5463,6 +5481,21 @@ export function makeCodexAdapterV2(adapterOptions: CodexAdapterV2Options): Provi
                     }),
                   ),
                 ),
+                Effect.tap((response) => {
+                  const policy = threadInput.runtimePolicy;
+                  return policy?.nativeAgent
+                    ? Effect.try(() =>
+                        assertNativeAgentSession(
+                          response,
+                          codexThreadRuntimeParams({
+                            threadId:
+                              threadInput.threadId ?? threadInput.providerThread.appThreadId,
+                            runtimePolicy: policy,
+                          }),
+                        ),
+                      )
+                    : Effect.void;
+                }),
                 Effect.flatMap(decodeCodexResumeMetadata),
               );
               return {
@@ -5553,6 +5586,35 @@ export function makeCodexAdapterV2(adapterOptions: CodexAdapterV2Options): Provi
                   ? yield* toCodexInput(turnInput)
                   : [];
               const mcpSession = McpProviderSession.readMcpProviderSession(turnInput.threadId);
+              if (turnInput.runtimePolicy.nativeAgent) {
+                const params = codexThreadRuntimeParams({
+                  threadId: turnInput.threadId,
+                  modelSelection: turnInput.modelSelection,
+                  runtimePolicy: turnInput.runtimePolicy,
+                });
+                const response = yield* client.raw.request("thread/resume", {
+                  threadId,
+                  excludeTurns: true,
+                  ...params,
+                });
+                yield* Effect.try(() => assertNativeAgentSession(response, params));
+                const inventory = yield* client.request("mcpServerStatus/list", {
+                  threadId,
+                  limit: 100,
+                  detail: "full",
+                });
+                const boundary = turnInput.runtimePolicy.nativeAgent;
+                if (boundary.expiresAt <= (yield* Clock.currentTimeMillis))
+                  return yield* Effect.fail(
+                    new ProviderAdapterProtocolError({
+                      driver: CODEX_PROVIDER,
+                      detail: "Native agent permission boundary expired.",
+                    }),
+                  );
+                yield* Effect.try(() =>
+                  assertNativeAgentInventory(inventory, boundary.toolNames, boundary.config),
+                );
+              }
               const turnStartParams = yield* buildCodexTurnStartParams({
                 nativeThreadId: threadId,
                 codexInput,

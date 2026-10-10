@@ -48,13 +48,26 @@ try {
   page.on("pageerror", (error) => errors.push(error.message));
   async function open(fixture, step) {
     await page.goto(`${base}/?experience=salesforce-setup&fixture=${fixture}&step=${step}`, {
-      waitUntil: "networkidle",
+      waitUntil: "domcontentloaded",
     });
     await page.locator('[data-headful-setup][aria-busy="false"]').waitFor();
     NodeAssert.equal(await page.getByRole("alert").count(), 0);
   }
-  const capture = async (name) => {
-    await page.screenshot({ path: NodePath.resolve(output, `${name}.png`) });
+  const capture = async (name, beforeBootstrap = false) => {
+    const path = NodePath.resolve(output, `${name}.png`);
+    if (beforeBootstrap) {
+      // The bootstrap request is deliberately held for this loading-screen
+      // capture. Playwright waits for document.fonts.ready, which can require
+      // that same request to finish. This screen contains only the helmet;
+      // capture its rendered pixels directly without waiting for page load.
+      const session = await page.context().newCDPSession(page);
+      try {
+        const { data } = await session.send("Page.captureScreenshot", { format: "png" });
+        await NodeFSP.writeFile(path, Buffer.from(data, "base64"));
+      } finally {
+        await session.detach();
+      }
+    } else await page.screenshot({ path });
     steps.push(name);
   };
   let resumeBootstrap;
@@ -75,9 +88,11 @@ try {
       .evaluate((image) => image.getBoundingClientRect().width),
     144,
   );
-  await capture("startup");
+  await capture("startup", true);
   resumeBootstrap();
-  await page.unroute("**/src/bootstrap.ts");
+  // Let the released handler finish before removing it; unroute can otherwise
+  // continue the pending request while the handler is doing the same thing.
+  await page.unrouteAll({ behavior: "wait" });
   await open("ready", "welcome");
   await page.getByRole("heading", { name: "Welcome to Headful" }).waitFor();
   await page.getByText("A HARNESS FOR YOUR ORG", { exact: true }).waitFor();

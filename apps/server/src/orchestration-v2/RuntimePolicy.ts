@@ -1,3 +1,5 @@
+import { nativeAgentBoundary } from "../headful/AgentBoundary.ts";
+import { nativeAgentConfig } from "../headful/NativeAgentPolicy.ts";
 import {
   ModelSelection,
   OrchestrationV2AppThread,
@@ -98,7 +100,42 @@ export const layerFromProjectStore: Layer.Layer<
     const providerInstances = yield* ProviderInstanceRegistry.ProviderInstanceRegistry;
     return RuntimePolicyV2.of({
       resolve: Effect.fn("RuntimePolicyV2.resolve")(function* (input) {
+        const boundary = yield* Effect.try({
+          try: () => nativeAgentBoundary(input.thread.id),
+          catch: (cause) =>
+            new RuntimePolicyResolveError({
+              projectId: input.thread.projectId,
+              providerInstanceId: input.modelSelection.instanceId,
+              cause,
+            }),
+        });
         const instance = yield* providerInstances.getInstance(input.modelSelection.instanceId);
+        if (boundary) {
+          if (
+            boundary.projectId !== input.thread.projectId ||
+            boundary.providerInstanceId !== input.modelSelection.instanceId ||
+            boundary.model !== input.modelSelection.model ||
+            instance?.driverKind !== "codex"
+          )
+            return yield* Effect.fail(
+              new RuntimePolicyResolveError({
+                projectId: input.thread.projectId,
+                providerInstanceId: input.modelSelection.instanceId,
+                cause: "Native agent boundary mismatch.",
+              }),
+            );
+          return ProviderAdapterV2RuntimePolicy.make({
+            runtimeMode: "approval-required",
+            interactionMode: "default",
+            cwd: boundary.workspace,
+            approvalPolicy: "never",
+            nativeAgent: {
+              expiresAt: boundary.expiresAt,
+              toolNames: boundary.mcp.tools,
+              config: nativeAgentConfig(boundary),
+            },
+          });
+        }
         const supportedRuntimeModes =
           instance === undefined
             ? undefined
@@ -149,19 +186,21 @@ export function layerWithOverride(
         resolve: (input) =>
           base.resolve(input).pipe(
             Effect.map((policy) =>
-              ProviderAdapterV2RuntimePolicy.make({
-                ...policy,
-                ...(override.cwd === undefined ? {} : { cwd: override.cwd }),
-                ...(override.approvalPolicy === undefined
-                  ? {}
-                  : { approvalPolicy: override.approvalPolicy }),
-                ...(override.sandboxPolicy === undefined
-                  ? {}
-                  : { sandboxPolicy: override.sandboxPolicy }),
-                ...(override.reasoningEffort === undefined
-                  ? {}
-                  : { reasoningEffort: override.reasoningEffort }),
-              }),
+              policy.nativeAgent
+                ? policy
+                : ProviderAdapterV2RuntimePolicy.make({
+                    ...policy,
+                    ...(override.cwd === undefined ? {} : { cwd: override.cwd }),
+                    ...(override.approvalPolicy === undefined
+                      ? {}
+                      : { approvalPolicy: override.approvalPolicy }),
+                    ...(override.sandboxPolicy === undefined
+                      ? {}
+                      : { sandboxPolicy: override.sandboxPolicy }),
+                    ...(override.reasoningEffort === undefined
+                      ? {}
+                      : { reasoningEffort: override.reasoningEffort }),
+                  }),
             ),
           ),
       } satisfies RuntimePolicyV2Shape;
