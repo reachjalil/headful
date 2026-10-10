@@ -146,18 +146,20 @@ export async function permissionDetail(env: Env, org: Org, id: string) {
     permissionSetSchema,
   );
   if (!set.records[0]) throw new HttpError(404, "permission_missing", "Permission set not found.");
-  const objects = await query(
-    env,
-    org,
-    `SELECT Id,ParentId,SobjectType,PermissionsRead,PermissionsCreate,PermissionsEdit,PermissionsDelete,PermissionsViewAllRecords,PermissionsModifyAllRecords,LastModifiedDate,SystemModstamp FROM ObjectPermissions WHERE ParentId='${id}' ORDER BY SobjectType LIMIT 200`,
-    objectPermissionSchema,
-  );
-  const fields = await query(
-    env,
-    org,
-    `SELECT Id,ParentId,SobjectType,Field,PermissionsRead,PermissionsEdit,LastModifiedDate,SystemModstamp FROM FieldPermissions WHERE ParentId='${id}' ORDER BY Field LIMIT 200`,
-    fieldPermissionSchema,
-  );
+  const [objects, fields] = await Promise.all([
+    query(
+      env,
+      org,
+      `SELECT Id,ParentId,SobjectType,PermissionsRead,PermissionsCreate,PermissionsEdit,PermissionsDelete,PermissionsViewAllRecords,PermissionsModifyAllRecords,LastModifiedDate,SystemModstamp FROM ObjectPermissions WHERE ParentId='${id}' ORDER BY SobjectType LIMIT 200`,
+      objectPermissionSchema,
+    ),
+    query(
+      env,
+      org,
+      `SELECT Id,ParentId,SobjectType,Field,PermissionsRead,PermissionsEdit,LastModifiedDate,SystemModstamp FROM FieldPermissions WHERE ParentId='${id}' ORDER BY Field LIMIT 200`,
+      fieldPermissionSchema,
+    ),
+  ]);
   return {
     permissionSet: set.records[0],
     objects: objects.records,

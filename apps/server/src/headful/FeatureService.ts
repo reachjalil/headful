@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Store from "./Store.ts";
 import { HttpError } from "./domain/types.ts";
-import { extensionFeatureSchema } from "../../../../packages/contracts/src/headful-extensions.ts";
+import { modFeatureSchema } from "../../../../packages/contracts/src/headful-mods.ts";
 import type { z } from "zod";
 export const featureRegistry = [
   {
@@ -80,7 +80,7 @@ export const featureRegistry = [
   },
 ] as const;
 export type FeatureId = string;
-type Feature = z.output<typeof extensionFeatureSchema> & { extensionId?: string };
+type Feature = z.output<typeof modFeatureSchema> & { modId?: string };
 export class FeatureManager {
   private store: Store.LocalStore;
   private registry: Feature[] = featureRegistry.map((feature) => ({
@@ -89,14 +89,14 @@ export class FeatureManager {
     configuration: [...feature.configuration],
     permissions: [...feature.permissions],
   }));
-  private extensionActive: (id: string) => boolean = () => false;
+  private modActive: (id: string) => boolean = () => false;
   constructor(store: Store.LocalStore) {
     this.store = store;
   }
-  registerExtensions(
+  registerMods(
     contributions: readonly {
       id: string;
-      features: readonly z.output<typeof extensionFeatureSchema>[];
+      features: readonly z.output<typeof modFeatureSchema>[];
     }[],
     isActive: (id: string) => boolean,
   ) {
@@ -106,10 +106,10 @@ export class FeatureManager {
         if (registry.some((existing) => existing.id === feature.id))
           throw new HttpError(
             400,
-            "extension_feature_collision",
-            "An extension feature conflicts with an installed feature.",
+            "mod_feature_collision",
+            "An mod feature conflicts with an installed feature.",
           );
-        registry.push({ ...feature, extensionId: contribution.id });
+        registry.push({ ...feature, modId: contribution.id });
       }
     }
     for (const feature of registry) {
@@ -125,14 +125,20 @@ export class FeatureManager {
           throw new HttpError(
             400,
             "feature_dependency_missing",
-            "An extension requires a missing feature.",
+            "An mod requires a missing feature.",
           );
         for (const dependency of item.dependencies) visit(dependency, new Set([...path, id]));
       };
       visit(feature.id, new Set());
     }
     this.registry = registry;
-    this.extensionActive = isActive;
+    this.modActive = isActive;
+  }
+  resetMods() {
+    this.registry = this.registry.filter((f) => !f.modId);
+  }
+  setModResolver(resolver: (id: string) => boolean) {
+    this.modActive = resolver;
   }
   configuredEnabled(id: FeatureId): boolean {
     const feature = this.registry.find((f) => f.id === id);
@@ -148,13 +154,17 @@ export class FeatureManager {
     return Boolean(
       feature &&
       this.configuredEnabled(id) &&
-      (!feature.extensionId || this.extensionActive(feature.extensionId)) &&
+      (!feature.modId || this.modActive(feature.modId)) &&
       feature.dependencies.every((dependency) => this.enabled(dependency)),
     );
   }
   list() {
     return {
-      features: this.registry.map((f) => ({ ...f, enabled: this.enabled(f.id) })),
+      features: this.registry.map((f) => ({
+        ...f,
+        enabled: this.enabled(f.id),
+        configuredEnabled: this.configuredEnabled(f.id),
+      })),
       mode: this.store.preference("onboardingMode", "minimal"),
       onboardingComplete: this.store.preference("onboardingComplete", false),
     };
@@ -185,7 +195,7 @@ export class FeatureManager {
       throw new HttpError(
         403,
         "feature_disabled",
-        `${this.registry.find((f) => f.id === id)?.name ?? "This feature"} is disabled or its extension is unavailable in Headful settings.`,
+        `${this.registry.find((f) => f.id === id)?.name ?? "This feature"} is disabled or its mod is unavailable in Headful settings.`,
       );
   }
 }

@@ -584,12 +584,11 @@ const resolvePrimaryStartConfig = Effect.fn("desktop.backendConfiguration.resolv
       cwd: environment.backendCwd,
       env: {
         HEADFUL_DESKTOP_CAPABILITY: desktopCapability,
-        HEADFUL_MCP_BRIDGE: environment.isPackaged
-          ? environment.path.join(environment.resourcesPath, "headful-mcp.mjs")
-          : (process.env.HEADFUL_MCP_BRIDGE ?? ""),
-        HEADFUL_MCP_ASSETS: environment.isPackaged
-          ? environment.path.join(environment.resourcesPath, "headful", "mcp-app")
-          : (process.env.HEADFUL_MCP_ASSETS ?? ""),
+        HEADFUL_MODS_DIR: environment.isPackaged
+          ? environment.path.join(environment.resourcesPath, "headful/mods")
+          : (process.env.HEADFUL_MODS_DIR ??
+            environment.path.join(environment.rootDir, "artifacts/mods")),
+
         ...backendChildEnvPatch(),
         ELECTRON_RUN_AS_NODE: "1",
       },

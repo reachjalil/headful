@@ -1,0 +1,37 @@
+name: Headful public mods
+on:
+  pull_request:
+    paths:
+      [
+        "apps/**/headful/**",
+        "apps/desktop/src/mod-preload.ts",
+        "packages/contracts/**",
+        "packages/mod-sdk/**",
+        "packages/headful-admin-utilities/**",
+        "examples/**",
+        "scripts/**",
+        "pnpm-lock.yaml",
+        ".github/workflows/headful-mods.yml",
+      ]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  public-host-and-sdk:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.10.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "26"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --filter @t3tools/desktop... --filter t3... --filter @t3tools/scripts
+      - run: pnpm --filter @headfulcloud/admin-utilities build
+      - run: pnpm headful:mods public-build
+      - run: node examples/hello-mod/build.mjs
+      - run: pnpm headful:mods pack examples/hello-mod artifacts/mods/org.example.hello.headfulmod
+      - run: pnpm exec vp test run apps/server/src/headful/mods apps/server/src/headful/UtilityService.test.ts apps/server/src/headful/WorkspaceService.test.ts scripts/lib/headful-mod-artifact.test.ts --bail 1
+      - run: pnpm headful:mods:journey

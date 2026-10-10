@@ -1,8 +1,0 @@
-{
-  "schemaVersion": 1,
-  "extensions": [
-    { "packageName": "@headfulcloud/admin-utilities" },
-    { "packageName": "@headfulcloud/mcp-apps", "optional": true },
-    { "packageName": "@headfulcloud/connect-desktop", "optional": true }
-  ]
-}

@@ -1,13 +1,49 @@
-import { useRef, useState, type ComponentType } from "react";
-import { OrgShortcuts, FavoriteLinks } from "./OrgShortcuts";
-import { RecordInspector } from "./RecordInspector";
-import { SoqlWorkspace, SavedQueriesControl } from "./SoqlWorkspace";
-import { SchemaExplorer } from "./SchemaExplorer";
-import { Diagnostics } from "./Diagnostics";
+import { lazy, memo, useRef, useState, type ComponentType } from "react";
+export { CodeEditor, type CodeEditorHandle } from "./CodeEditor";
+export { DocumentView } from "./DocumentView";
+export { PanelTabs, panelTabId } from "./PanelTabs";
 import type { UtilityComponentProps } from "./types";
 export { OrgCloud } from "./OrgShortcuts";
 export type { UtilityComponentProps, UtilityOrg } from "./types";
 export { orgEnvironment } from "./types";
+export { LazySurface } from "./LazySurface";
+
+function registered(load: () => Promise<{ default: ComponentType<UtilityComponentProps> }>) {
+  let pending: ReturnType<typeof load> | undefined;
+  const preload = () => (pending ??= load());
+  return { Component: memo(lazy(preload)), preload };
+}
+const tools = {
+  "headful.admin-utilities/backup-recovery": registered(() =>
+    import("./BackupRecovery").then((m) => ({ default: m.BackupRecovery })),
+  ),
+  "headful.admin-utilities/org-shortcuts": registered(() =>
+    import("./OrgShortcuts").then((m) => ({ default: m.OrgShortcuts })),
+  ),
+  "headful.admin-utilities/record-inspector": registered(() =>
+    import("./RecordInspector").then((m) => ({ default: m.RecordInspector })),
+  ),
+  "headful.admin-utilities/soql-workspace": registered(() =>
+    import("./SoqlWorkspace").then((m) => ({ default: m.SoqlWorkspace })),
+  ),
+  "headful.admin-utilities/schema-explorer": registered(() =>
+    import("./SchemaExplorer").then((m) => ({ default: m.SchemaExplorer })),
+  ),
+  "headful.admin-utilities/diagnostics": registered(() =>
+    import("./Diagnostics").then((m) => ({ default: m.Diagnostics })),
+  ),
+};
+
+/** Intent may warm host code, but never triggers an org read or activates a mod. */
+export function preloadAdminUtility(id: string) {
+  return tools[id as keyof typeof tools]?.preload();
+}
+const FavoriteLinks = lazy(() =>
+  import("./OrgShortcuts").then((m) => ({ default: m.FavoriteLinks })),
+);
+const SavedQueriesControl = lazy(() =>
+  import("./SoqlWorkspace").then((m) => ({ default: m.SavedQueriesControl })),
+);
 
 function SearchControl(props: UtilityComponentProps) {
   return (
@@ -21,7 +57,7 @@ function StatusControl(props: UtilityComponentProps) {
   return (
     <span
       className={`hf-badge ${org?.status === "connected" ? "hf-good" : ""}`}
-      title="Status of this selected connection"
+      aria-label={`Selected connection: ${org?.status || "No connection"}`}
     >
       {org?.status || "No connection"}
     </span>
@@ -59,7 +95,6 @@ function ActionsControl(props: UtilityComponentProps) {
               type="button"
               key={action.id}
               disabled={action.disabled}
-              title={action.reason}
               onClick={() => {
                 setOpen(false);
                 action.run();
@@ -67,6 +102,7 @@ function ActionsControl(props: UtilityComponentProps) {
               }}
             >
               {action.name}
+              {action.reason && <small>{action.reason}</small>}
             </button>
           ))}
         </div>
@@ -75,22 +111,16 @@ function ActionsControl(props: UtilityComponentProps) {
   );
 }
 
-/** Registered React components are resolved from reviewed manifest references, never extension DOM hooks. */
+/** Registered React components are resolved from reviewed manifest references, never mod DOM hooks. */
 export const adminUtilityComponents: Readonly<
   Record<string, ComponentType<UtilityComponentProps>>
-> = {
-  "admin-utilities/org-shortcuts": OrgShortcuts,
-  "admin-utilities/record-inspector": RecordInspector,
-  "admin-utilities/soql-workspace": SoqlWorkspace,
-  "admin-utilities/schema-explorer": SchemaExplorer,
-  "admin-utilities/diagnostics": Diagnostics,
-};
+> = Object.fromEntries(Object.entries(tools).map(([id, tool]) => [id, tool.Component]));
 export const adminUtilityHeaderComponents: Readonly<
   Record<string, ComponentType<UtilityComponentProps>>
 > = {
-  "admin-utilities/search": SearchControl,
-  "admin-utilities/favorites": FavoriteLinks,
-  "admin-utilities/status": StatusControl,
-  "admin-utilities/actions": ActionsControl,
-  "admin-utilities/secondary": SavedQueriesControl,
+  "headful.admin-utilities/search": SearchControl,
+  "headful.admin-utilities/favorites": FavoriteLinks,
+  "headful.admin-utilities/status": StatusControl,
+  "headful.admin-utilities/actions": ActionsControl,
+  "headful.admin-utilities/secondary": SavedQueriesControl,
 };

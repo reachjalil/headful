@@ -1,21 +1,13 @@
 // @effect-diagnostics nodeBuiltinImport:off
 // Native test fixtures own only isolated temporary files and exact fake CLI children.
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
-import {
-  mkdtempSync,
-  writeFileSync,
-  chmodSync,
-  readFileSync,
-  existsSync,
-  watch,
-  rmSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import * as NodeFS from "node:fs";
+import * as NodeOS from "node:os";
+import * as NodePath from "node:path";
 import { CliAdapter } from "./SalesforceCli.ts";
 import { LocalStore } from "./Store.ts";
 import { makeHeadfulRuntime, type HeadfulRuntime } from "./WorkspaceService.ts";
-import type { HeadfulExtensionDefinition } from "../../../../packages/contracts/src/headful-extensions.ts";
+import type { HeadfulModDefinition } from "../../../../packages/contracts/src/headful-mods.ts";
 import { boundedSoql } from "./utilities/soql.ts";
 const desktop = { kind: "desktop" as const },
   orgId = "fictional_utility_org",
@@ -26,20 +18,22 @@ const cleanup: Array<{ runtime: HeadfulRuntime; folder: string }> = [];
 afterEach(async () => {
   for (const item of cleanup.splice(0)) {
     await item.runtime.close();
-    rmSync(item.folder, { recursive: true, force: true });
+    NodeFS.rmSync(item.folder, { recursive: true, force: true });
   }
   vi.restoreAllMocks();
 });
-function extension(id: string, features: string[]): HeadfulExtensionDefinition {
+function mod(id: string, features: string[]): HeadfulModDefinition {
   return {
+    nativeTrusted: true,
+    hostPermissions: ["salesforce:read", "salesforce:org-navigation"],
     manifest: {
       schemaVersion: 1,
+      execution: "native",
       apiVersion: 1,
       id,
       name: "Fixture utilities",
-      description: "Test-only trusted extension.",
+      description: "Test-only trusted mod.",
       version: "1.0.0",
-      packageName: `@headfulcloud/${id}`,
       license: "MIT",
       source: "bundled",
       defaultEnabled: true,
@@ -58,32 +52,33 @@ function extension(id: string, features: string[]): HeadfulExtensionDefinition {
   };
 }
 function readyFile(folder: string, name: string) {
-  const file = join(folder, name);
+  const file = NodePath.join(folder, name);
   return new Promise<string>((resolve) => {
-    const observer = watch(folder, () => {
-      if (existsSync(file)) {
-        const data = readFileSync(file, "utf8");
+    const observer = NodeFS.watch(folder, () => {
+      if (NodeFS.existsSync(file)) {
+        const data = NodeFS.readFileSync(file, "utf8");
         if (data) {
           observer.close();
           resolve(data);
         }
       }
     });
-    if (existsSync(file)) {
+    if (NodeFS.existsSync(file)) {
       observer.close();
-      resolve(readFileSync(file, "utf8"));
+      resolve(NodeFS.readFileSync(file, "utf8"));
     }
   });
 }
 function setup() {
-  const folder = mkdtempSync(join(tmpdir(), "headful-utilities-")),
-    executable = join(folder, "sf"),
-    trace = join(folder, "trace.jsonl");
+  const folder = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "headful-utilities-")),
+    executable = NodePath.join(folder, "sf"),
+    trace = NodePath.join(folder, "trace.jsonl");
   const fixture = `
 const fs=require('node:fs');const path=require('node:path');const folder=${JSON.stringify(folder)};const args=process.argv.slice(2);const emit=r=>console.log(JSON.stringify({status:0,result:r}));const flag=n=>args[args.indexOf(n)+1];
-if(args[0]==='version'){console.log(JSON.stringify({cliVersion:'@salesforce/cli/2.86.9'}));return;}
+if(args[0]==='version'){console.log(JSON.stringify({cliVersion:'@salesforce/cli/2.136.0'}));return;}
 fs.appendFileSync(path.join(folder,'trace.jsonl'),JSON.stringify(args)+'\\n');
 if(args[0]==='org'&&args[1]==='display'){emit({id:'${sfOrgId}',username:'fictional@example.com',instanceUrl:'https://fictional.my.salesforce.com',accessToken:'fixture-private-access-token'});return;}
+if(args[0]==='org'&&args[1]==='auth'&&args[2]==='show-access-token'){emit({accessToken:'fixture-private-access-token'});return;}
 if(args[0]==='api'){console.log(JSON.stringify({user_id:fs.existsSync(path.join(folder,'identity-changed'))?'005000000000009':'${userId}',organization_id:'${sfOrgId}',preferred_username:'fictional@example.com',access_token:'must-never-cross-the-boundary'}));return;}
 if(args[0]==='data'&&args[1]==='query'){
  const q=flag('--query');if(q.includes('REJECT_MARKER')){console.log(JSON.stringify({status:1,name:'MALFORMED_QUERY',message:'access_token private-error-secret'}));process.exitCode=1;return;}if(q.includes('WAIT_MARKER')){process.on('SIGTERM',()=>{fs.writeFileSync(path.join(folder,'stopped'),String(process.pid));process.exit(0)});fs.writeFileSync(path.join(folder,'started'),JSON.stringify({pid:process.pid,args}));setInterval(()=>{},10000);return;}
@@ -91,14 +86,14 @@ if(args[0]==='data'&&args[1]==='query'){
  const limit=Number(q.match(/LIMIT (\\d+)(?: OFFSET \\d+)?$/)?.[1]??3);emit({totalSize:limit,done:true,accessToken:'raw-envelope-secret',records:[{Id:'001000000000001',Name:'One',Account:{Name:'Related'},attributes:{url:'never-render'}},{Id:'001000000000002',Name:'fixture-private-access-token'},{Id:'001000000000003',Name:'Three'}].slice(0,limit)});return;
 }
 if(args[0]==='sobject'&&args[1]==='list'){emit(['Account','Example__c']);return;}
-if(args[0]==='sobject'&&args[1]==='describe'){emit({name:fs.existsSync(path.join(folder,'describe-changed'))?'Contact':'Account',label:'Account',queryable:true,fields:[{name:'Id',label:'Record ID',type:'id'},{name:'Name',label:'Account name',type:'string',length:255}],childRelationships:[]});return;}
+if(args[0]==='sobject'&&args[1]==='describe'){emit({name:fs.existsSync(path.join(folder,'describe-changed'))?'Contact':'Account',label:'Account',queryable:true,fields:[{name:'Id',label:'Record ID',type:'id'},{name:'Name',label:'Account name',type:'string',length:255},{name:'Revenue_Band__c',label:'Revenue band',type:'string',calculated:true,calculatedFormula:fs.existsSync(path.join(folder,'describe-long-formula'))?'x'.repeat(20001):'IF(AnnualRevenue >= 1000000, "Enterprise", "Growth")'},{name:'Rollup__c',label:'Rollup',type:'double',calculated:true}],childRelationships:[]});return;}
 if(args[0]==='data'&&args[1]==='get'){emit({Id:flag('--record-id'),Name:'Readable outside layout',attributes:{accessToken:'never-render'}});return;}
 if(args[0]==='org'&&args[1]==='list'){emit([{name:'DataStorageMB',max:1000,remaining:500}]);return;}
 if(args[0]==='apex'&&args[1]==='list'){emit([{Id:'07L000000000001',LogLength:50,StartTime:'2026-10-04T00:00:00Z',Operation:'Apex',Status:'Success'}]);return;}
 if(args[0]==='apex'&&args[1]==='get'){emit([{log:'Diagnostic fixture-private-access-token\\nAuthorization: Bearer private-other-secret\\nclient_secret=another-private-secret'}]);return;}
 emit({});`;
-  writeFileSync(executable, `#!${process.execPath}\n${fixture}`);
-  chmodSync(executable, 0o700);
+  NodeFS.writeFileSync(executable, `#!${process.execPath}\n${fixture}`);
+  NodeFS.chmodSync(executable, 0o700);
   const store = new LocalStore(folder);
   for (const [id, sfId, username] of [
     [orgId, sfOrgId, "fictional@example.com"],
@@ -124,15 +119,16 @@ emit({});`;
       homeDir: folder,
       store,
       cli,
-      extensions: [
-        extension("admin-utilities", [
-          "admin-utilities/org-shortcuts",
-          "admin-utilities/record-inspector",
-          "admin-utilities/soql",
-          "admin-utilities/schema",
-          "admin-utilities/diagnostics",
+      mods: [
+        mod("headful.admin-utilities", [
+          "headful.admin-utilities/org-shortcuts",
+          "headful.admin-utilities/backup",
+          "headful.admin-utilities/record-inspector",
+          "headful.admin-utilities/soql",
+          "headful.admin-utilities/schema",
+          "headful.admin-utilities/diagnostics",
         ]),
-        extension("mcp-apps", ["local-mcp", "external-harness"]),
+        mod("headful.mcp-apps", ["local-mcp", "external-harness"]),
       ],
     });
   cleanup.push({ runtime, folder });
@@ -142,8 +138,8 @@ emit({});`;
     store,
     cli,
     trace: () =>
-      existsSync(trace)
-        ? readFileSync(trace, "utf8")
+      NodeFS.existsSync(trace)
+        ? NodeFS.readFileSync(trace, "utf8")
             .trim()
             .split("\n")
             .map((line) => JSON.parse(line) as string[])
@@ -151,6 +147,21 @@ emit({});`;
   };
 }
 describe("CLI-backed Salesforce utilities", () => {
+  it("opens only the canonical backup destination for the verified org without exposing native credentials", async () => {
+    const c = setup();
+    const result = await c.runtime.dispatch("utilities.backup.location", { orgId }, desktop);
+    expect(result).toEqual({
+      url: `https://headful.cloud/backup?sourceOrg=${sfOrgId}`,
+      executor: "cloud",
+      cloudAuthorization: "required",
+    });
+    expect(JSON.stringify(result)).not.toMatch(/accessToken|fictional@example|fixture-private/);
+    NodeFS.writeFileSync(NodePath.join(c.folder, "identity-changed"), "yes");
+    await expect(
+      c.runtime.dispatch("utilities.backup.location", { orgId }, desktop),
+    ).rejects.toThrow();
+  });
+
   it("pins identity and argv, returns bounded pages, redacts CLI credentials and rejects execution clauses", async () => {
     const c = setup();
     const result = await c.runtime.dispatch(
@@ -258,7 +269,7 @@ describe("CLI-backed Salesforce utilities", () => {
       ),
     ).rejects.toMatchObject({ code: "org_missing" });
     expect(c.trace()).toHaveLength(0);
-    writeFileSync(join(c.folder, "identity-changed"), "changed");
+    NodeFS.writeFileSync(NodePath.join(c.folder, "identity-changed"), "changed");
     await expect(
       c.runtime.dispatch(
         "utilities.record.get",
@@ -267,10 +278,10 @@ describe("CLI-backed Salesforce utilities", () => {
       ),
     ).rejects.toMatchObject({ code: "identity_changed" });
     expect(c.trace().some((args) => args[0] === "data" && args[1] === "get")).toBe(false);
-    await c.runtime.dispatch("extensions.disable", { id: "admin-utilities" }, desktop);
+    await c.runtime.dispatch("mods.disable", { id: "headful.admin-utilities" }, desktop);
     await expect(
       c.runtime.dispatch("utilities.objects.list", { orgId }, desktop),
-    ).rejects.toMatchObject({ code: "feature_disabled" });
+    ).rejects.toMatchObject({ code: "mod_disabled" });
     expect((await c.runtime.dispatch("status", {}, desktop)).accountRequired).toBe(false);
   });
   it("cancels its exact CLI child and keeps cancellation ownership pinned to client and org", async () => {
@@ -315,7 +326,7 @@ describe("CLI-backed Salesforce utilities", () => {
       (await c.runtime.dispatch("utilities.history.list", { orgId }, desktop)).history[0]?.status,
     ).toBe("cancelled");
   });
-  it("terminates an active query when its extension is disabled", async () => {
+  it("terminates an active query when its mod is disabled", async () => {
     const c = setup(),
       started = readyFile(c.folder, "started"),
       stopped = readyFile(c.folder, "stopped");
@@ -331,9 +342,27 @@ describe("CLI-backed Salesforce utilities", () => {
       )
       .catch((error: unknown) => error);
     await started;
-    await c.runtime.dispatch("extensions.disable", { id: "admin-utilities" }, desktop);
+    await c.runtime.dispatch("mods.disable", { id: "headful.admin-utilities" }, desktop);
     expect(await result).toMatchObject({ code: "query_cancelled" });
     expect(await stopped).toMatch(/^\d+$/);
+  });
+  it("returns bounded formula source from the verified describe read and preserves unavailable source", async () => {
+    const c = setup();
+    const result = await c.runtime.dispatch(
+      "utilities.objects.describe",
+      { orgId, object: "Account" },
+      desktop,
+    );
+    expect(result.fields[1]).toMatchObject({ calculated: false, calculatedFormula: null });
+    expect(result.fields[2]).toMatchObject({
+      calculated: true,
+      calculatedFormula: 'IF(AnnualRevenue >= 1000000, "Enterprise", "Growth")',
+    });
+    expect(result.fields[3]).toMatchObject({ calculated: true, calculatedFormula: null });
+    NodeFS.writeFileSync(NodePath.join(c.folder, "describe-long-formula"), "oversize");
+    await expect(
+      c.runtime.dispatch("utilities.objects.describe", { orgId, object: "Account" }, desktop),
+    ).rejects.toThrow();
   });
   it("inspects schema and records, bounds diagnostics/logs, and preserves org-scoped saved work/header preferences", async () => {
     const c = setup();
@@ -361,7 +390,7 @@ describe("CLI-backed Salesforce utilities", () => {
         )
       ).fields[1]?.value,
     ).toBe("Readable outside layout");
-    writeFileSync(join(c.folder, "describe-changed"), "changed");
+    NodeFS.writeFileSync(NodePath.join(c.folder, "describe-changed"), "changed");
     await expect(
       c.runtime.dispatch(
         "utilities.record.get",
@@ -412,10 +441,10 @@ describe("CLI-backed Salesforce utilities", () => {
     const preferences = {
       workspace: {
         global: {
-          order: ["core/search", "admin-utilities/saved-queries"],
+          order: ["core/search", "headful.admin-utilities/saved-queries"],
           hidden: ["core/status"],
         },
-        overrides: { "admin-utilities/soql": { order: [], hidden: [] } },
+        overrides: { "headful.admin-utilities/soql": { order: [], hidden: [] } },
       },
     };
     expect(await c.runtime.dispatch("preferences.set", preferences, desktop)).toEqual(preferences);

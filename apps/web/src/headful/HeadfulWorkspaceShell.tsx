@@ -1,3 +1,4 @@
+/* oxlint-disable shadcn/no-unknown-classes -- Retained Headful controls use the scoped workspace stylesheet. */
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   headfulUtilityResultSchemas,
@@ -5,11 +6,12 @@ import {
 } from "@t3tools/contracts/headful-utilities";
 import {
   adminUtilityHeaderComponents,
+  LazySurface,
   OrgCloud,
   orgEnvironment,
   type UtilityComponentProps,
 } from "@headfulcloud/admin-utilities/web";
-import type { resolveHeadfulContributions } from "@t3tools/contracts/headful-extensions";
+import type { resolveHeadfulContributions } from "@t3tools/contracts/headful-mods";
 import type { z } from "zod";
 import {
   moveHeaderControl,
@@ -212,7 +214,7 @@ export function HeadfulWorkspaceShell({
               <span className="hf-visually-hidden">Target org</span>
               <select
                 aria-label="Target Salesforce org"
-                title={
+                aria-description={
                   org
                     ? `${org.label} · ${org.salesforceOrgId} · ${org.username}`
                     : "Choose a connected org"
@@ -233,20 +235,23 @@ export function HeadfulWorkspaceShell({
             </label>
             <span className="hf-badge">{org ? orgEnvironment(org) : "No org"}</span>
             {pinned && (
-              <span className="hf-badge" title="Saved work stays in its original Salesforce org">
+              <span
+                className="hf-badge"
+                aria-description="Saved work stays in its original Salesforce org"
+              >
                 Pinned
               </span>
             )}
           </div>
-          <strong className="hf-workspace-title" title={title}>
-            {title}
-          </strong>
+          <strong className="hf-workspace-title">{title}</strong>
           <button
             className="hf-button hf-compact"
             type="button"
             ref={customizeTrigger}
             disabled={!preferencesReady}
-            title={!preferencesReady ? "Reading the saved workspace preferences" : undefined}
+            aria-description={
+              !preferencesReady ? "Reading the saved workspace preferences" : undefined
+            }
             onClick={() => {
               draftFor(preferences.overrides[context.workspaceId] ? "workspace" : "global");
               setError("");
@@ -274,7 +279,9 @@ export function HeadfulWorkspaceShell({
                   className={`hf-workspace-control hf-workspace-control-${control.placement}`}
                   key={control.id}
                 >
-                  <Component {...headerContext} />
+                  <LazySurface label={control.name}>
+                    <Component {...headerContext} />
+                  </LazySurface>
                 </div>
               ) : (
                 <span className="hf-muted" key={control.id}>
@@ -397,9 +404,7 @@ export function HeadfulWorkspaceShell({
           ))}
         </ol>
         {controls.length === 0 && (
-          <p className="hf-note">
-            No active extension contributes optional controls to this workspace.
-          </p>
+          <p className="hf-note">No active mod contributes optional controls to this workspace.</p>
         )}
         <div className="hf-workspace-dialog-actions">
           <button className="hf-button" type="button" disabled={busy} onClick={reset}>
@@ -475,7 +480,6 @@ export function HeadfulWorkspaceShell({
               key={command.id}
               type="button"
               disabled={command.disabled}
-              title={command.reason}
               onClick={() => runCommand(command)}
             >
               <strong>{command.name}</strong>

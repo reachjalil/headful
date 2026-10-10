@@ -1,12 +1,13 @@
 #!/usr/bin/env node
-import * as fs from "node:fs/promises";
-import * as path from "node:path";
-import { fileURLToPath } from "node:url";
+// @effect-diagnostics nodeBuiltinImport:off globalConsole:off
+import * as NodeFSP from "node:fs/promises";
+import * as NodePath from "node:path";
+import * as NodeURL from "node:url";
 import sharp from "sharp";
-const root = fileURLToPath(new URL("..", import.meta.url));
-const dir = path.join(root, "assets/headful");
-await fs.mkdir(dir, { recursive: true });
-const raw = await fs.readFile(path.join(dir, "helmet.svg"), "utf8");
+const root = NodeURL.fileURLToPath(new URL("..", import.meta.url));
+const dir = NodePath.join(root, "assets/headful");
+await NodeFSP.mkdir(dir, { recursive: true });
+const raw = await NodeFSP.readFile(NodePath.join(dir, "helmet.svg"), "utf8");
 const colors = {
   violet: "#626dd2",
   lime: "#6e9d21",
@@ -21,22 +22,22 @@ for (const [name, color] of Object.entries(colors))
   )
     .resize(44, 44)
     .png()
-    .toFile(path.join(dir, `tray-${name}.png`));
+    .toFile(NodePath.join(dir, `tray-${name}.png`));
 const app = raw
   .replace(
     '<g id="helmet-shell"',
     '<rect x="20" y="20" width="472" height="472" rx="112" fill="#11182b"/><g id="helmet-shell"',
   )
   .replace("Headful Cloud", "Headful");
-await sharp(Buffer.from(app)).resize(1024, 1024).png().toFile(path.join(dir, "icon-1024.png"));
+await sharp(Buffer.from(app)).resize(1024, 1024).png().toFile(NodePath.join(dir, "icon-1024.png"));
 for (const size of [16, 32, 180, 192, 512])
   await sharp(Buffer.from(app))
     .resize(size, size)
     .png()
-    .toFile(path.join(dir, `icon-${size}.png`));
-await fs.copyFile(
-  path.join(dir, "icon-1024.png"),
-  path.join(root, "apps/desktop/resources/icon.png"),
+    .toFile(NodePath.join(dir, `icon-${size}.png`));
+await NodeFSP.copyFile(
+  NodePath.join(dir, "icon-1024.png"),
+  NodePath.join(root, "apps/desktop/resources/icon.png"),
 );
 for (const [source, target] of [
   ["icon-16.png", "favicon-16x16.png"],
@@ -44,5 +45,8 @@ for (const [source, target] of [
   ["icon-180.png", "apple-touch-icon.png"],
   ["helmet.svg", "favicon.svg"],
 ])
-  await fs.copyFile(path.join(dir, source), path.join(root, "apps/web/public", target));
+  await NodeFSP.copyFile(
+    NodePath.join(dir, source!),
+    NodePath.join(root, "apps/web/public", target!),
+  );
 console.log("Headful app and org-colored tray icons generated.");

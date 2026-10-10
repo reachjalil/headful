@@ -412,6 +412,7 @@ contextBridge.exposeInMainWorld("desktopBridge", {
 // Narrow local application bridge. No filesystem, executable, provider token or
 // unrestricted shell is exposed to renderer code.
 contextBridge.exposeInMainWorld("headfulBridge", {
+  experienceControl: (code: string) => ipcRenderer.invoke("headful:experienceControl", code),
   dispatch: (operation: string, input: unknown = {}) =>
     ipcRenderer.invoke("headful:dispatch", operation, input),
   open: (route: string) => ipcRenderer.send("headful:open", route),

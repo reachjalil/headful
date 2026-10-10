@@ -8,8 +8,12 @@ import type { z } from "zod";
 type RecordData = z.infer<(typeof headfulUtilityResultSchemas)["utilities.record.get"]>;
 
 export function RecordInspector(props: UtilityComponentProps) {
-  const [object, setObject] = useState("Account");
-  const [recordId, setRecordId] = useState("");
+  const [object, setObject] = useState(
+    typeof props.initialInput?.object === "string" ? props.initialInput.object : "Account",
+  );
+  const [recordId, setRecordId] = useState(
+    typeof props.initialInput?.recordId === "string" ? props.initialInput.recordId : "",
+  );
   const [data, setData] = useState<RecordData | null>(null);
   const [search, setSearch] = useState("");
   const task = useUtilityTask();
@@ -25,7 +29,8 @@ export function RecordInspector(props: UtilityComponentProps) {
     );
     return task.reset;
   }, [props.orgId, props.initialInput?.object, props.initialInput?.recordId, task.reset]);
-  const inspect = () =>
+  const inspect = () => {
+    setData(null);
     void task.run(
       async () =>
         headfulUtilityResultSchemas["utilities.record.get"].parse(
@@ -33,6 +38,7 @@ export function RecordInspector(props: UtilityComponentProps) {
         ),
       setData,
     );
+  };
   const fields =
     data?.fields.filter((field) =>
       `${field.name} ${field.label} ${field.type} ${displayValue(field.value)}`
@@ -41,8 +47,9 @@ export function RecordInspector(props: UtilityComponentProps) {
     ) ?? [];
   return (
     <UtilityPanel
+      className="hf-record-workspace"
       title="Record inspector"
-      description="Inspect a record’s readable fields, including fields outside its page layout. Enter its object API name and Salesforce ID. This tool is read-only."
+      description="Read fields beyond the page layout using an object API name and record ID."
       busy={task.busy}
       error={task.error}
     >
@@ -56,6 +63,7 @@ export function RecordInspector(props: UtilityComponentProps) {
         <label className="hf-field">
           Object API name
           <input
+            data-testid="admin-record-object"
             value={object}
             onChange={(event) => setObject(event.target.value)}
             pattern="[A-Za-z][A-Za-z0-9_]*"
@@ -67,6 +75,7 @@ export function RecordInspector(props: UtilityComponentProps) {
         <label className="hf-field hf-utility-grow">
           Record ID
           <input
+            data-testid="admin-record-id"
             value={recordId}
             onChange={(event) => setRecordId(event.target.value)}
             pattern="[A-Za-z0-9]{15}([A-Za-z0-9]{3})?"
@@ -75,7 +84,11 @@ export function RecordInspector(props: UtilityComponentProps) {
             placeholder="15 or 18 character Salesforce ID"
           />
         </label>
-        <button className="hf-button hf-primary" disabled={task.busy || !props.orgId}>
+        <button
+          className="hf-button hf-primary"
+          data-testid="admin-inspect-record"
+          disabled={task.busy || !props.orgId}
+        >
           Inspect record
         </button>
       </form>
@@ -182,14 +195,15 @@ export function RecordInspector(props: UtilityComponentProps) {
             </table>
           </div>
           {fields.length === 0 && <Empty>No readable fields match this filter.</Empty>}
-          <p className="hf-note">
-            Salesforce field and object permissions apply. This inspector does not edit records.
-          </p>
+          <div className="hf-panel-status">
+            {fields.length} of {data.fields.length} readable fields · Read only · Salesforce
+            permissions apply
+          </div>
         </>
       ) : (
         <Empty>
-          Choose an object and enter a record ID to read its accessible fields. Use the core Leads
-          view when you need to find a lead first.
+          Open a record from Query data results, or enter an object API name and record ID to read
+          its accessible fields.
         </Empty>
       )}
     </UtilityPanel>

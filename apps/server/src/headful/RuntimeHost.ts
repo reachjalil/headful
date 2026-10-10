@@ -1,3 +1,4 @@
+import type { HeadfulAgentRunnerFactory } from "../../../../packages/contracts/src/headful-agent.ts";
 // @effect-diagnostics nodeBuiltinImport:off preferSchemaOverJson:off
 // Headful is one scoped service in the existing T3 server process. Transports
 // never own an executor. The loopback boundary is not a mobile relay.
@@ -6,15 +7,18 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import * as NodeHttp from "node:http";
-import * as NodeFS from "node:fs/promises";
+import * as NodeFSP from "node:fs/promises";
 import * as NodePath from "node:path";
 import * as NodeCrypto from "node:crypto";
 import * as Lockfile from "proper-lockfile";
-import { Readable } from "node:stream";
+import * as NodeStream from "node:stream";
 import { z } from "zod";
 import * as ServerConfig from "../config.ts";
 import { headfulRpcRequestSchema } from "../../../../packages/contracts/src/headful.ts";
-import { loadInstalledExtensions } from "./InstalledExtensions.ts";
+import { ModError } from "../../../../packages/mod-sdk/src/schema.ts";
+import { ModRepository } from "./InstalledMods.ts";
+import { CommunityExecution } from "./mods/CommunityExecution.ts";
+import { createModBroker } from "./mods/ModBroker.ts";
 import { makeHeadfulRuntime, type HeadfulRuntime } from "./WorkspaceService.ts";
 import { HttpError } from "./domain/types.ts";
 
@@ -41,7 +45,7 @@ const isMissing = (error: unknown) =>
   typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT";
 
 async function privateRegularFile(file: string) {
-  const info = await NodeFS.lstat(file);
+  const info = await NodeFSP.lstat(file);
   if (
     !info.isFile() ||
     info.isSymbolicLink() ||
@@ -50,16 +54,16 @@ async function privateRegularFile(file: string) {
     info.size > 4096
   )
     throw new Error("Unsafe local runtime metadata.");
-  return NodeFS.readFile(file, "utf8");
+  return NodeFSP.readFile(file, "utf8");
 }
 async function writeMetadata(file: string, contents: unknown) {
   const temporary = `${file}.${NodeCrypto.randomBytes(9).toString("base64url")}.tmp`;
-  await NodeFS.writeFile(temporary, JSON.stringify(contents), { flag: "wx", mode: 0o600 });
+  await NodeFSP.writeFile(temporary, JSON.stringify(contents), { flag: "wx", mode: 0o600 });
   try {
-    await NodeFS.rename(temporary, file);
-    await NodeFS.chmod(file, 0o600);
+    await NodeFSP.rename(temporary, file);
+    await NodeFSP.chmod(file, 0o600);
   } catch (error) {
-    await NodeFS.unlink(temporary).catch(() => undefined);
+    await NodeFSP.unlink(temporary).catch(() => undefined);
     throw error;
   }
 }
@@ -81,20 +85,20 @@ function isAlive(pid: number) {
  * bearer token is placed on disk for a local harness to turn into human authority. */
 export async function startRuntimeHost(
   homeDir: string,
-  options: { desktopCapability?: string } = {},
+  options: { desktopCapability?: string; agentRunner?: HeadfulAgentRunnerFactory } = {},
 ) {
   const inheritedCapability = process.env.HEADFUL_DESKTOP_CAPABILITY;
   delete process.env.HEADFUL_DESKTOP_CAPABILITY;
   const capability = options.desktopCapability ?? inheritedCapability ?? bootstrapDesktopCapability;
-  await NodeFS.mkdir(homeDir, { recursive: true, mode: 0o700 });
-  const directory = await NodeFS.lstat(homeDir);
+  await NodeFSP.mkdir(homeDir, { recursive: true, mode: 0o700 });
+  const directory = await NodeFSP.lstat(homeDir);
   if (
     !directory.isDirectory() ||
     directory.isSymbolicLink() ||
     directory.uid !== process.getuid?.()
   )
     throw new Error("Unsafe Headful runtime directory.");
-  await NodeFS.chmod(homeDir, 0o700);
+  await NodeFSP.chmod(homeDir, 0o700);
   // Serialize startup/stale-owner recovery. This guard is released after startup;
   // the PID+nonce owner file then preserves runtime ownership for its lifetime.
   const releaseStartup = await Lockfile.lock(homeDir, {
@@ -126,7 +130,7 @@ export async function startRuntimeHost(
           "nonce" in value &&
           value.nonce === owner.nonce
         )
-          await NodeFS.unlink(file);
+          await NodeFSP.unlink(file);
       } catch {
         /* Never delete a replacement runtime's files or unique data. */
       }
@@ -148,21 +152,33 @@ export async function startRuntimeHost(
     try {
       const old = ownerSchema.parse(JSON.parse(await privateRegularFile(lockFile)));
       if (isAlive(old.pid)) throw new Error("Another Headful runtime already owns this store.");
-      await NodeFS.unlink(lockFile);
+      await NodeFSP.unlink(lockFile);
     } catch (error) {
       if (!isMissing(error)) throw error;
     }
-    const lock = await NodeFS.open(lockFile, "wx", 0o600);
+    const lock = await NodeFSP.open(lockFile, "wx", 0o600);
     try {
       await lock.writeFile(JSON.stringify(owner));
     } finally {
       await lock.close();
     }
     owned = true;
+    const execution = new CommunityExecution(
+      createModBroker(
+        () => runtime!.store,
+        () => runtime!.mods,
+      ),
+    );
+    const repository = new ModRepository(
+      homeDir,
+      execution,
+      process.env.HEADFUL_MODS_DIR || undefined,
+    );
     runtime = makeHeadfulRuntime({
       homeDir,
-      extensions: await loadInstalledExtensions(),
-      extensionHost: {
+      mods: await repository.load(),
+      ...(options.agentRunner ? { agentRunner: options.agentRunner } : {}),
+      modHost: {
         homeDir,
         executable: process.execPath,
         runtimeFile,
@@ -173,7 +189,7 @@ export async function startRuntimeHost(
       },
     });
     const service = runtime;
-    await service.extensions.initialize();
+    await service.mods.initialize();
     server = NodeHttp.createServer(async (request, response) => {
       const json = (status: number, value: unknown) => {
         if (response.headersSent) {
@@ -223,11 +239,11 @@ export async function startRuntimeHost(
           const headers = new Headers();
           for (const [name, value] of Object.entries(request.headers))
             if (typeof value === "string") headers.set(name, value);
-          const result = await service.extensions.handleMcp(
+          const result = await service.mods.handleMcp(
             new Request(`${origin}/mcp`, { method: "POST", headers, body }),
           );
           response.writeHead(result.status, Object.fromEntries(result.headers));
-          if (result.body) Readable.fromWeb(result.body).pipe(response);
+          if (result.body) NodeStream.Readable.fromWeb(result.body).pipe(response);
           else response.end();
           return;
         }
@@ -255,8 +271,86 @@ export async function startRuntimeHost(
           json(400, { error: "Invalid desktop request." });
           return;
         }
-        const result = service.extensions.acceptsDesktopIntegration(envelope.data.operation)
-          ? await service.extensions.dispatchDesktopIntegration(
+        const internal = z.strictObject({
+          context: z.string().uuid(),
+          method: z.string().max(180),
+          input: z.unknown(),
+        });
+        if (envelope.data.operation === "mods.execution.fail") {
+          const i = z.strictObject({ context: z.string().uuid() }).parse(envelope.data.input);
+          const id = execution.modForContext(i.context);
+          if (id) await service.mods.fail(id);
+          json(200, { result: { stopped: true } });
+          return;
+        }
+        if (envelope.data.operation === "mods.execution.pull") {
+          json(200, { result: execution.pull() });
+          return;
+        }
+        if (envelope.data.operation === "mods.execution.reply") {
+          const i = z
+            .strictObject({
+              context: z.string().uuid(),
+              id: z.string().uuid(),
+              result: z.unknown().optional(),
+              error: z.string().max(300).optional(),
+            })
+            .parse(envelope.data.input);
+          json(200, { result: execution.reply(i.context, i.id, i.result ?? null, i.error) });
+          return;
+        }
+        if (envelope.data.operation === "mods.broker") {
+          const i = internal.parse(envelope.data.input);
+          json(200, { result: await execution.call(i.context, i.method, i.input) });
+          return;
+        }
+        if (envelope.data.operation === "mods.install") {
+          const i = z.strictObject({ path: z.string().max(1000) }).parse(envelope.data.input);
+          const definitions = await repository.install(i.path, (definitions) =>
+            service.mods.validateDefinitions(definitions),
+          );
+          await service.mods.replaceDefinitions(definitions);
+          await repository.pruneRetired();
+          json(200, { result: service.mods.list() });
+          return;
+        }
+        if (envelope.data.operation === "mods.uninstall") {
+          const i = z.strictObject({ id: z.string().max(128) }).parse(envelope.data.input);
+          await service.mods.disable(i.id);
+          const definitions = await repository.uninstall(i.id);
+          await service.mods.replaceDefinitions(definitions);
+          json(200, { result: service.mods.list() });
+          return;
+        }
+        if (envelope.data.operation === "mods.deleteData") {
+          const i = z.strictObject({ id: z.string().max(128) }).parse(envelope.data.input);
+          json(200, { result: await service.mods.deleteData(i.id) });
+          return;
+        }
+        if (envelope.data.operation === "mods.background") {
+          const i = z
+            .strictObject({
+              id: z.string().max(128),
+              revision: z.string().regex(/^[a-f0-9]{64}$/),
+              settings: z.unknown(),
+            })
+            .parse(envelope.data.input);
+          json(200, { result: await service.mods.startBackground(i.id, i.revision, i.settings) });
+          return;
+        }
+        if (envelope.data.operation === "mods.grant") {
+          const i = z
+            .strictObject({
+              id: z.string().max(128),
+              revision: z.string().regex(/^[a-f0-9]{64}$/),
+              permissions: z.array(z.string().max(100)).max(40),
+            })
+            .parse(envelope.data.input);
+          json(200, { result: await service.mods.grant(i.id, i.revision, i.permissions) });
+          return;
+        }
+        const result = service.mods.acceptsDesktopIntegration(envelope.data.operation)
+          ? await service.mods.dispatchDesktopIntegration(
               envelope.data.operation,
               envelope.data.input,
             )
@@ -268,9 +362,13 @@ export async function startRuntimeHost(
         json(200, { result });
       } catch (error) {
         // Never reflect Node, JSON, Zod or provider exceptions into diagnostics.
-        json(error instanceof HttpError ? error.status : 400, {
+        json(error instanceof HttpError ? error.status : error instanceof ModError ? 409 : 400, {
+          code:
+            error instanceof HttpError || error instanceof ModError
+              ? error.code
+              : "invalid_request",
           error:
-            error instanceof HttpError
+            error instanceof HttpError || error instanceof ModError
               ? error.message
               : "Headful could not complete this local request. Check the selected org and workflow.",
         });

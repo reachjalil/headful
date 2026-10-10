@@ -23,9 +23,13 @@
       "types": "./src/headful.ts",
       "import": "./src/headful.ts"
     },
-    "./headful-extensions": {
-      "types": "./src/headful-extensions.ts",
-      "import": "./src/headful-extensions.ts"
+    "./headful-experiences": {
+      "types": "./src/headful-experiences.ts",
+      "import": "./src/headful-experiences.ts"
+    },
+    "./headful-mods": {
+      "types": "./src/headful-mods.ts",
+      "import": "./src/headful-mods.ts"
     },
     "./headful-utilities": {
       "types": "./src/headful-utilities.ts",

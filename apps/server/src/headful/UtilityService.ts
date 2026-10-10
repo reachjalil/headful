@@ -52,6 +52,7 @@ const rawDescribe = z.object({
         createable: z.boolean().default(false),
         updateable: z.boolean().default(false),
         calculated: z.boolean().default(false),
+        calculatedFormula: z.string().max(20000).nullable().default(null),
         referenceTo: z.array(utilityApiNameSchema).default([]),
         relationshipName: z.string().nullable().default(null),
         picklistValues: z
@@ -448,7 +449,7 @@ export class UtilityManager {
         return i;
       },
     };
-    // All transports use these wrappers; direct desktop calls cannot bypass extension gates.
+    // All transports use these wrappers; direct desktop calls cannot bypass mod gates.
     this.handlers = Object.fromEntries(
       (Object.keys(this.handlers) as HeadfulUtilityOperation[]).map((operation) => {
         const handler = this.handlers[operation] as (
@@ -625,7 +626,7 @@ export class UtilityManager {
       .history.filter((entry) => entry.orgId === orgId);
   }
   cancelUnavailable() {
-    if (!this.features.enabled("admin-utilities/soql"))
+    if (!this.features.enabled("headful.admin-utilities/soql"))
       for (const job of this.active.values()) job.controller.abort();
   }
   close() {

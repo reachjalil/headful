@@ -1,0 +1,7 @@
+await app.reset();
+await app.mock({"fixture":"ready"});
+await app.flow({"id":"mod-management"});
+await app.assert({"path":"flow","equals":"mod-management"});
+await app.assert({"path":"step","equals":"inspect"});
+await app.click({"testId":"mods-editor-locations-org.example.hello"});
+await app.screenshot();

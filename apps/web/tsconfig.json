@@ -26,6 +26,7 @@
     ]
   },
   "include": [
+    "../../packages/mod-sdk/src",
     "src",
     "vite",
     "vite.config.ts",
@@ -35,7 +36,11 @@
     "../../scripts/lib/public-config.ts",
     "../../scripts/lib/third-party-licenses.ts",
     "../../packages/contracts/src/headful.ts",
-    "../../packages/contracts/src/headful-extensions.ts",
+    "../../packages/contracts/src/headful-cli-policy.ts",
+    "../../packages/contracts/src/headful-salesforce-tasks.ts",
+    "../../packages/contracts/src/headful-agent.ts",
+    "../../packages/contracts/src/headful-org-insights.ts",
+    "../../packages/contracts/src/headful-mods.ts",
     "../../packages/contracts/src/headful-utilities.ts",
     "../../packages/headful-admin-utilities/src/web/**/*.ts",
     "../../packages/headful-admin-utilities/src/web/**/*.tsx",

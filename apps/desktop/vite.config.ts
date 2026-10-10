@@ -105,7 +105,7 @@ export default defineConfig({
       sourcemap: true,
       outExtensions: () => ({ js: ".cjs" }),
       define: publicConfigDefine,
-      entry: ["src/preload.ts"],
+      entry: ["src/preload.ts", "src/mod-preload.ts"],
       deps: {
         // Sandboxed Electron preloads cannot reliably resolve package imports
         // from inside the packaged ASAR. Bundle Clerk's preload bridge into the

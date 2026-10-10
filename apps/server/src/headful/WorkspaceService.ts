@@ -1,4 +1,7 @@
+import type { HeadfulAgentRunnerFactory } from "../../../../packages/contracts/src/headful-agent.ts";
+import { utilityOperationPolicies } from "../../../../packages/contracts/src/headful-utilities.ts";
 import { z } from "zod";
+import { OrgInsights } from "./OrgInsights.ts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -8,11 +11,11 @@ import * as SalesforceCli from "./SalesforceCli.ts";
 import * as OrgService from "./OrgService.ts";
 import * as FeatureService from "./FeatureService.ts";
 import * as UtilityService from "./UtilityService.ts";
-import * as ExtensionService from "./extensions/ExtensionManager.ts";
+import * as ModService from "./mods/ModManager.ts";
 import type {
-  HeadfulExtensionDefinition,
-  HeadfulExtensionPaths,
-} from "../../../../packages/contracts/src/headful-extensions.ts";
+  HeadfulModDefinition,
+  HeadfulModPaths,
+} from "../../../../packages/contracts/src/headful-mods.ts";
 import {
   headfulInputSchemas,
   headfulResultSchemas,
@@ -42,7 +45,8 @@ export class HeadfulServiceError extends Schema.TaggedError<HeadfulServiceError>
   }
 }
 export interface HeadfulRuntime {
-  readonly extensions: ExtensionService.ExtensionManager;
+  readonly store: Store.LocalStore;
+  readonly mods: ModService.ModManager;
   dispatch<K extends HeadfulOperation>(
     operation: K,
     input: unknown,
@@ -65,8 +69,9 @@ export function makeHeadfulRuntime(options: {
   homeDir: string;
   cli?: SalesforceCli.CliAdapter;
   store?: Store.LocalStore;
-  extensions?: readonly HeadfulExtensionDefinition[];
-  extensionHost?: HeadfulExtensionPaths;
+  mods?: readonly HeadfulModDefinition[];
+  modHost?: HeadfulModPaths;
+  agentRunner?: HeadfulAgentRunnerFactory;
 }): HeadfulRuntime {
   const store = options.store ?? new Store.LocalStore(options.homeDir);
   const cli =
@@ -74,55 +79,64 @@ export function makeHeadfulRuntime(options: {
   const orgs = new OrgService.OrgManager(store, cli),
     features = new FeatureService.FeatureManager(store);
   const env: Env = { DB: store, cli };
+  const insights = new OrgInsights(cli);
   const utilities = new UtilityService.UtilityManager(store, cli, features);
   let closed = false;
   let closing: Promise<void> | undefined;
-  // Extension lifecycle hooks already run inside the manager's serialized queue.
+  // Mod lifecycle hooks already run inside the manager's serialized queue.
   // Their restricted core port must not wait on that same initialization queue.
-  const extensions = new ExtensionService.ExtensionManager({
+  const mods = new ModService.ModManager({
     store,
     features,
     runtime: {
       dispatch: (operation, input, authority) => dispatch(operation, input, authority, true),
     },
-    paths: options.extensionHost ?? { homeDir: options.homeDir },
-    definitions: options.extensions ?? [],
+    paths: {
+      ...(options.modHost ?? { homeDir: options.homeDir }),
+      salesforceCli: store.preference<string | null>("cliPath", null) ?? "sf",
+    },
+    definitions: options.mods ?? [],
+    ...(options.agentRunner ? { agentRunner: options.agentRunner } : {}),
   });
   const handlers: Handlers = {
     ...utilities.handlers,
-    "extensions.list": async (_, p) => {
+    "mods.api": async (i, p) => {
       desktopOnly(p);
-      return extensions.list();
+      return mods.api(i.id, i.api, i.input);
     },
-    "extensions.inspect": async (i, p) => {
+    "mods.list": async (_, p) => {
       desktopOnly(p);
-      return extensions.inspect(i.id);
+      return mods.list();
     },
-    "extensions.enable": async (i, p) => {
+    "mods.inspect": async (i, p) => {
       desktopOnly(p);
-      return extensions.enable(i.id);
+      return mods.inspect(i.id);
     },
-    "extensions.disable": async (i, p) => {
+    "mods.enable": async (i, p) => {
       desktopOnly(p);
-      const disabling = extensions.disable(i.id);
+      return mods.enable(i.id);
+    },
+    "mods.disable": async (i, p) => {
+      desktopOnly(p);
+      const disabling = mods.disable(i.id);
       utilities.cancelUnavailable();
       return disabling;
     },
-    "extensions.settings": async (i, p) => {
+    "mods.settings": async (i, p) => {
       desktopOnly(p);
-      return extensions.settings(i.id);
+      return mods.settings(i.id);
     },
-    "extensions.settings.set": async (i, p) => {
+    "mods.settings.set": async (i, p) => {
       desktopOnly(p);
-      return extensions.setSettings(i.id, i.values);
+      return mods.setSettings(i.id, i.values);
     },
-    "extensions.command": async (i, p) => {
+    "mods.command": async (i, p) => {
       desktopOnly(p);
-      return extensions.command(i.id, i.command, i.input);
+      return mods.command(i.id, i.command, i.input, i.artifactRevision);
     },
-    "extensions.surface": async (i, p) => {
+    "mods.surface": async (i, p) => {
       desktopOnly(p);
-      return extensions.surface(i.id, i.surfaceId);
+      return mods.surface(i.id, i.surfaceId, i.artifactRevision);
     },
     status: async (_, p) => {
       const state = orgs.list();
@@ -187,21 +201,21 @@ export function makeHeadfulRuntime(options: {
       desktopOnly(p);
       features.require("org-management");
       const result = orgs.update(i.orgId, i);
-      await extensions.publishEvent({ type: "org-policy-changed", orgId: i.orgId });
+      await mods.publishEvent({ type: "org-policy-changed", orgId: i.orgId });
       return result;
     },
     "orgs.default": async (i, p) => {
       desktopOnly(p);
       features.require("org-management");
       const result = orgs.setDefault(i.orgId);
-      await extensions.publishEvent({ type: "default-org-changed", orgId: i.orgId });
+      await mods.publishEvent({ type: "default-org-changed", orgId: i.orgId });
       return result;
     },
     "orgs.remove": async (i, p) => {
       desktopOnly(p);
       features.require("org-management");
       const result = orgs.remove(i.orgId);
-      await extensions.publishEvent({ type: "org-policy-changed", orgId: i.orgId });
+      await mods.publishEvent({ type: "org-policy-changed", orgId: i.orgId });
       return result;
     },
     "orgs.health": async (i, p) => {
@@ -219,13 +233,43 @@ export function makeHeadfulRuntime(options: {
       const org = orgs.get(i.orgId);
       await cli.logout(org.username);
       const result = orgs.remove(i.orgId);
-      await extensions.publishEvent({ type: "org-policy-changed", orgId: i.orgId });
+      await mods.publishEvent({ type: "org-policy-changed", orgId: i.orgId });
       return result;
     },
     "orgs.sandboxes": async (i, p) => {
       workspaceScope(p);
       await sf.requireOrg(env, p, i.orgId);
       return orgs.sandboxes(i.orgId);
+    },
+    "orgs.overview": async (i, p) => {
+      workspaceScope(p);
+      features.require("org-management");
+      return insights.overview(await sf.requireOrg(env, p, i.orgId));
+    },
+    "orgs.limits": async (i, p) => {
+      workspaceScope(p);
+      features.require("org-management");
+      return insights.limits(await sf.requireOrg(env, p, i.orgId));
+    },
+    "orgs.licenses": async (i, p) => {
+      workspaceScope(p);
+      features.require("org-management");
+      return insights.licenses(await sf.requireOrg(env, p, i.orgId));
+    },
+    "orgs.metadata": async (i, p) => {
+      workspaceScope(p);
+      features.require("org-management");
+      return insights.metadata(await sf.requireOrg(env, p, i.orgId));
+    },
+    "orgs.metadata.components": async (i, p) => {
+      workspaceScope(p);
+      features.require("org-management");
+      return insights.components(await sf.requireOrg(env, p, i.orgId), i.type, i.folder);
+    },
+    "orgs.environments": async (i, p) => {
+      workspaceScope(p);
+      features.require("org-management");
+      return insights.environments(await sf.requireOrg(env, p, i.orgId));
     },
     "features.list": async (_, p) => {
       desktopOnly(p);
@@ -235,8 +279,8 @@ export function makeHeadfulRuntime(options: {
       desktopOnly(p);
       features.set(i.id, i.enabled);
       utilities.cancelUnavailable();
-      await extensions.featureChanged(i.id, i.enabled);
-      await extensions.publishEvent({ type: "feature-changed", id: i.id, enabled: i.enabled });
+      await mods.featureChanged(i.id, i.enabled);
+      await mods.publishEvent({ type: "feature-changed", id: i.id, enabled: i.enabled });
       return features.list();
     },
     "onboarding.complete": async (i, p) => {
@@ -402,7 +446,7 @@ export function makeHeadfulRuntime(options: {
     operation: K,
     input: unknown,
     authority: HeadfulAuthority,
-    fromExtension = false,
+    fromMod = false,
   ): Promise<HeadfulResult<K>> {
     if (closed)
       throw new HttpError(
@@ -410,7 +454,17 @@ export function makeHeadfulRuntime(options: {
         "runtime_closed",
         "Headful is no longer running. Open the app to reconnect.",
       );
-    if (!fromExtension) await extensions.initialize();
+    if (!fromMod) {
+      await mods.initialize();
+      if (Object.hasOwn(utilityOperationPolicies, operation)) {
+        const policy = utilityOperationPolicies[operation as keyof typeof utilityOperationPolicies];
+        if (policy.feature) await mods.activateFeature(policy.feature);
+      }
+      if (authority.kind === "mcp")
+        await mods.activateFeature(
+          authority.source === "connect" ? "headful.connect-desktop/remote-access" : "local-mcp",
+        );
+    }
     if (!Object.hasOwn(headfulInputSchemas, operation))
       throw new HttpError(404, "operation_unknown", "This Headful operation is unavailable.");
     const decoded = headfulInputSchemas[operation].safeParse(input);
@@ -429,8 +483,8 @@ export function makeHeadfulRuntime(options: {
       );
     if (authority.kind === "mcp") {
       if (authority.source === "connect") {
-        extensions.requireActive("connect-desktop");
-        features.require("connect-desktop/remote-access");
+        mods.requireActive("headful.connect-desktop");
+        features.require("headful.connect-desktop/remote-access");
       } else {
         features.require("local-mcp");
         features.require("external-harness");
@@ -493,14 +547,15 @@ export function makeHeadfulRuntime(options: {
     }
   }
   return {
+    store,
     dispatch,
-    extensions,
+    mods,
     close: () => {
       if (closing) return closing;
       closed = true;
       utilities.close();
       cli.close();
-      closing = extensions.close().finally(() => store.close());
+      closing = mods.close().finally(() => store.close());
       return closing;
     },
   };

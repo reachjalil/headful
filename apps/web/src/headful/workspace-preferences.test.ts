@@ -2,31 +2,35 @@ import { describe, expect, it } from "vite-plus/test";
 import { moveHeaderControl, resolveHeaderControls } from "./workspace-preferences";
 
 const controls = [
-  { id: "admin-utilities/search", order: 0, defaultVisible: true },
-  { id: "admin-utilities/favorites", order: 1, defaultVisible: true },
-  { id: "admin-utilities/status", order: 2, defaultVisible: false },
+  { id: "headful.admin-utilities/search", order: 0, defaultVisible: true },
+  { id: "headful.admin-utilities/favorites", order: 1, defaultVisible: true },
+  { id: "headful.admin-utilities/status", order: 2, defaultVisible: false },
 ];
 
 describe("workspace header preferences", () => {
   it("resolves persisted order and visibility without restoring unavailable contributions", () => {
     const result = resolveHeaderControls(controls.slice(0, 2), {
-      order: ["admin-utilities/status", "admin-utilities/favorites", "admin-utilities/search"],
-      hidden: ["admin-utilities/search"],
+      order: [
+        "headful.admin-utilities/status",
+        "headful.admin-utilities/favorites",
+        "headful.admin-utilities/search",
+      ],
+      hidden: ["headful.admin-utilities/search"],
     });
     expect(result.map(({ id, visible }) => ({ id, visible }))).toEqual([
-      { id: "admin-utilities/favorites", visible: true },
-      { id: "admin-utilities/search", visible: false },
+      { id: "headful.admin-utilities/favorites", visible: true },
+      { id: "headful.admin-utilities/search", visible: false },
     ]);
   });
   it("adds newly contributed controls in declared order and de-duplicates saved IDs", () => {
     const result = resolveHeaderControls(controls, {
-      order: ["admin-utilities/favorites", "admin-utilities/favorites"],
+      order: ["headful.admin-utilities/favorites", "headful.admin-utilities/favorites"],
       hidden: [],
     });
     expect(result.map(({ id }) => id)).toEqual([
-      "admin-utilities/favorites",
-      "admin-utilities/search",
-      "admin-utilities/status",
+      "headful.admin-utilities/favorites",
+      "headful.admin-utilities/search",
+      "headful.admin-utilities/status",
     ]);
     expect(resolveHeaderControls(controls).at(-1)?.visible).toBe(false);
     expect(resolveHeaderControls(controls, { order: [], hidden: [] }).at(-1)?.visible).toBe(false);

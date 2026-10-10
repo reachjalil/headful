@@ -1,16 +1,20 @@
 // @effect-diagnostics nodeBuiltinImport:off globalFetch:off preferSchemaOverJson:off
 import * as Effect from "effect/Effect";
+import { HostProcessArchitecture } from "@t3tools/shared/hostProcess";
 import * as Option from "effect/Option";
 import * as Electron from "electron";
-import * as FS from "node:fs/promises";
-import * as Path from "node:path";
+import * as NodeFSP from "node:fs/promises";
+import { readRuntimeSession } from "./RuntimeSession.ts";
+import * as NodePath from "node:path";
+import { ModSandboxHost } from "./ModSandbox.ts";
+import { startDesktopControl } from "./DesktopControl.ts";
 import { signDesktopRequest } from "./DesktopCapability.ts";
 import { headfulResultSchemas } from "@t3tools/contracts/headful";
 import {
-  headfulExtensionsSchema,
+  headfulModsSchema,
   resolveHeadfulContributions,
-  type HeadfulExtensionDescriptor,
-} from "@t3tools/contracts/headful-extensions";
+  type HeadfulModDescriptor,
+} from "@t3tools/contracts/headful-mods";
 import { locationSchema } from "@t3tools/contracts/headful-workspace/contract-schema";
 import * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
 import * as DesktopWindow from "../window/DesktopWindow.ts";
@@ -46,17 +50,22 @@ export const ensureSingleInstance = Effect.sync(() => {
   if (!Electron.app.requestSingleInstanceLock()) Electron.app.exit(0);
 });
 export const register = Effect.gen(function* () {
+  const architecture = yield* HostProcessArchitecture;
   const environment = yield* DesktopEnvironment.DesktopEnvironment;
   const desktopWindow = yield* DesktopWindow.DesktopWindow;
   const context = yield* Effect.context<DesktopWindow.DesktopWindow>();
   const run = Effect.runPromiseWith(context);
-  const homeDir = Path.join(environment.stateDir, "headful");
+  const homeDir = NodePath.join(environment.stateDir, "headful");
+  const control = yield* Effect.promise(() =>
+    startDesktopControl(homeDir, !environment.isPackaged),
+  );
+  yield* Effect.addFinalizer(() => Effect.promise(() => control.close()));
   let buildCommit: string | undefined = Option.getOrUndefined(environment.commitHashOverride);
   if (environment.isPackaged) {
     const metadata: unknown = yield* Effect.promise(async () => {
       try {
         return JSON.parse(
-          await FS.readFile(Path.join(environment.appRoot, "package.json"), "utf8"),
+          await NodeFSP.readFile(NodePath.join(environment.appRoot, "package.json"), "utf8"),
         );
       } catch {
         return null;
@@ -73,7 +82,7 @@ export const register = Effect.gen(function* () {
   }
   const rpc = async (operation: string, input: unknown = {}): Promise<unknown> => {
     const session: LocalSession = JSON.parse(
-      await FS.readFile(Path.join(homeDir, "desktop-session.json"), "utf8"),
+      await readRuntimeSession(NodePath.join(homeDir, "desktop-session.json")),
     );
     if (!safeOrigin(session.origin)) throw new Error("Headful runtime unavailable.");
     const body = JSON.stringify({ operation, input });
@@ -87,8 +96,8 @@ export const register = Effect.gen(function* () {
       signal: AbortSignal.timeout(120_000),
     });
     const payload: unknown = await response.json();
-    if (!response.ok)
-      throw new Error(
+    if (!response.ok) {
+      const error = new Error(
         typeof payload === "object" &&
           payload &&
           "error" in payload &&
@@ -96,10 +105,29 @@ export const register = Effect.gen(function* () {
           ? payload.error
           : "Headful operation failed.",
       );
+      throw Object.assign(error, {
+        code:
+          typeof payload === "object" &&
+          payload &&
+          "code" in payload &&
+          typeof payload.code === "string"
+            ? payload.code
+            : "operation_failed",
+      });
+    }
     if (!payload || typeof payload !== "object" || !("result" in payload))
       throw new Error("Invalid local service response.");
     return payload.result;
   };
+  const sandbox = new ModSandboxHost(
+    rpc,
+    NodePath.join(
+      environment.isPackaged ? environment.appRoot : environment.rootDir,
+      "apps/desktop/dist-electron/mod-preload.cjs",
+    ),
+  );
+  sandbox.start();
+  yield* Effect.addFinalizer(() => Effect.sync(() => sandbox.close()));
   const open = async (route = "workspace") => {
     await run(desktopWindow.activate);
     const window = Electron.BrowserWindow.getAllWindows().find(
@@ -122,9 +150,108 @@ export const register = Effect.gen(function* () {
   const handle = async (event: Electron.IpcMainInvokeEvent, operation: unknown, input: unknown) => {
     if (!trustedSender(event) || typeof operation !== "string")
       throw new Error("Headful workspace required.");
+    if (/^mods\.(?:execution|broker|grant|install|uninstall|deleteData|background)/.test(operation))
+      throw new Error("Host-only operation.");
+    if (operation === "system.mods.install") {
+      const choice = await Electron.dialog.showOpenDialog({
+        title: "Install a local Headful mod",
+        properties: ["openFile"],
+        filters: [{ name: "Headful mod", extensions: ["headfulmod"] }],
+      });
+      if (choice.canceled || !choice.filePaths[0]) return { canceled: true };
+      const result = await rpc("mods.install", { path: choice.filePaths[0] });
+      await refresh();
+      return result;
+    }
+    if (operation === "system.mods.permissions") {
+      const request = input as { id?: unknown };
+      if (typeof request?.id !== "string") throw new Error("Select an installed mod.");
+      const mod = headfulModsSchema
+        .parse(await rpc("mods.list"))
+        .mods.find((m) => m.manifest.id === request.id);
+      if (!mod) throw new Error("Mod not installed.");
+      const review = await Electron.dialog.showMessageBox({
+        type: "question",
+        title: "Review mod permissions",
+        message: `Allow ${mod.manifest.name} ${mod.manifest.version}?`,
+        detail: `Artifact ${mod.artifactRevision}\nExecution: ${mod.manifest.execution}\n\nRequired permissions:\n${mod.manifest.permissions.join("\n") || "None"}\nOptional:\n${mod.manifest.optionalPermissions.join("\n") || "None"}\n\nThese permissions do not approve Salesforce writes.`,
+        buttons: [
+          "Decline",
+          "Allow required permissions",
+          "Allow required and optional permissions",
+        ],
+        defaultId: 0,
+        cancelId: 0,
+      });
+      if (review.response === 0) return { declined: true };
+      return rpc("mods.grant", {
+        id: mod.manifest.id,
+        revision: mod.artifactRevision,
+        permissions:
+          review.response === 2
+            ? [...mod.manifest.permissions, ...mod.manifest.optionalPermissions]
+            : mod.manifest.permissions,
+      });
+    }
+    if (operation === "system.mods.background") {
+      const request = input as { id?: unknown };
+      if (typeof request?.id !== "string") throw new Error("Select a mod.");
+      const mod = headfulModsSchema
+        .parse(await rpc("mods.list"))
+        .mods.find((m) => m.manifest.id === request.id);
+      if (!mod || !mod.manifest.activation.includes("background"))
+        throw new Error("No background contribution.");
+      const settings = (await rpc("mods.settings", { id: mod.manifest.id })) as { values: unknown };
+      const review = await Electron.dialog.showMessageBox({
+        type: "question",
+        title: "Enable a background subscription",
+        message: `Start ${mod.manifest.name} in the background?`,
+        detail: `Artifact ${mod.artifactRevision}\nExact settings: ${JSON.stringify(settings.values)}\nIt remains subject to current grants. Disable the mod to stop it.`,
+        buttons: ["Cancel", "Start"],
+        defaultId: 0,
+        cancelId: 0,
+      });
+      if (review.response !== 1) return { canceled: true };
+      return rpc("mods.background", {
+        id: mod.manifest.id,
+        revision: mod.artifactRevision,
+        settings: settings.values,
+      });
+    }
+    if (operation === "system.mods.deleteData") {
+      const request = input as { id?: unknown };
+      if (typeof request?.id !== "string") throw new Error("Select a mod.");
+      const review = await Electron.dialog.showMessageBox({
+        type: "warning",
+        title: "Delete mod data permanently",
+        message: `Delete local data for ${request.id}?`,
+        detail:
+          "This disables the mod and permanently deletes only its settings, permission grant, private storage and local exports. Salesforce logins, orgs and durable workflows are preserved.",
+        buttons: ["Cancel", "Delete mod data"],
+        defaultId: 0,
+        cancelId: 0,
+      });
+      if (review.response !== 1) return { canceled: true };
+      return rpc("mods.deleteData", { id: request.id });
+    }
+    if (operation === "system.mods.uninstall") {
+      const request = input as { id?: unknown };
+      if (typeof request?.id !== "string") throw new Error("Select a mod.");
+      const review = await Electron.dialog.showMessageBox({
+        type: "question",
+        title: "Uninstall mod",
+        message: "Uninstall this mod?",
+        detail: "Its private settings and storage are preserved.",
+        buttons: ["Cancel", "Uninstall"],
+        defaultId: 0,
+        cancelId: 0,
+      });
+      if (review.response !== 1) return { canceled: true };
+      return rpc("mods.uninstall", { id: request.id });
+    }
     if (operation === "system.openInstaller") {
       await Electron.shell.openExternal(
-        `https://developer.salesforce.com/media/salesforce-cli/sf/channels/stable/sf-${process.arch === "arm64" ? "arm64" : "x64"}.pkg`,
+        `https://developer.salesforce.com/media/salesforce-cli/sf/channels/stable/sf-${architecture === "arm64" ? "arm64" : "x64"}.pkg`,
       );
       return { opened: true };
     }
@@ -146,7 +273,7 @@ export const register = Effect.gen(function* () {
         upstreamVersion: "0.0.45",
         upstreamCommit: "efecd3cf8bcec3d1891b5f5a27dc2f6d797c6448",
         protocolVersion: 1,
-        architecture: process.arch,
+        architecture: architecture,
         packaged: environment.isPackaged,
         updates: "Manual early-access builds; automatic updates disabled.",
       };
@@ -156,7 +283,7 @@ export const register = Effect.gen(function* () {
     if (
       operation.startsWith("orgs.") ||
       operation.startsWith("features.") ||
-      operation.startsWith("extensions.")
+      operation.startsWith("mods.")
     )
       await refresh();
     return result;
@@ -173,10 +300,10 @@ export const register = Effect.gen(function* () {
         (url.pathname && url.pathname !== "/")
       )
         return;
-      const allowed = ["view", "orgId", "recordId", "workflowId", "proposalId"];
+      const allowed = new Set(["view", "orgId", "recordId", "workflowId", "proposalId"]);
       const keys = [...url.searchParams.keys()];
       if (
-        keys.some((key) => !allowed.includes(key)) ||
+        keys.some((key) => !allowed.has(key)) ||
         new Set(keys).size !== keys.length ||
         value.length > 1000
       )
@@ -214,7 +341,7 @@ export const register = Effect.gen(function* () {
     )
       void open(route);
   });
-  const iconRoot = Path.join(
+  const iconRoot = NodePath.join(
     environment.isPackaged ? environment.resourcesPath : environment.rootDir,
     environment.isPackaged ? "headful" : "assets/headful",
   );
@@ -234,7 +361,7 @@ export const register = Effect.gen(function* () {
       ? mapped
       : "violet";
     let image = Electron.nativeImage
-      .createFromPath(Path.join(iconRoot, `tray-${known}.png`))
+      .createFromPath(NodePath.join(iconRoot, `tray-${known}.png`))
       .resize({ width: 22, height: 22 });
     if (/^#[a-fA-F0-9]{6}$/.test(color)) {
       const bitmap = image.toBitmap();
@@ -259,7 +386,7 @@ export const register = Effect.gen(function* () {
     let runtimeReady = false;
     let mcpEnabled = false;
     let clientCount = 0;
-    let installedExtensions: HeadfulExtensionDescriptor[] = [];
+    let installedMods: HeadfulModDescriptor[] = [];
     let features: { id: string; enabled: boolean }[] = [];
     try {
       const result = headfulResultSchemas.status.parse(await rpc("status"));
@@ -268,14 +395,14 @@ export const register = Effect.gen(function* () {
       runtimeReady = true;
       features = result.features;
       mcpEnabled = result.features.some((feature) => feature.id === "local-mcp" && feature.enabled);
-      installedExtensions = headfulExtensionsSchema.parse(await rpc("extensions.list")).extensions;
+      installedMods = headfulModsSchema.parse(await rpc("mods.list")).mods;
       const value = await rpc("grants.list");
       if (value && typeof value === "object" && "grants" in value && Array.isArray(value.grants))
         clientCount = value.grants.filter((grant) => grant && grant.revokedAt === null).length;
     } catch {
       /* Menu remains useful while starting or after a recoverable runtime error. */
     }
-    const contributions = resolveHeadfulContributions(installedExtensions, features);
+    const contributions = resolveHeadfulContributions(installedMods, features);
     const environmentLabel = (org: TrayOrg) =>
       org.isSandbox === null ? "Environment unverified" : org.isSandbox ? "Sandbox" : "Production";
     const active = orgs.find((org) => org.id === defaultId);
@@ -366,7 +493,7 @@ export const register = Effect.gen(function* () {
       {
         label: "Agent access & local MCP…",
         click: () => {
-          void open("integrations");
+          void open("mods?modId=headful.mcp-apps");
         },
       },
       {
@@ -377,9 +504,9 @@ export const register = Effect.gen(function* () {
         },
       },
       { type: "separator" },
-      ...installedExtensions.flatMap((extension) =>
-        extension.runtimeStatuses.map((status) => ({
-          label: `${extension.manifest.name} · ${status.label}${status.clientCount === undefined ? "" : ` · ${status.clientCount} clients`}${status.targetOrgIds.length ? ` · ${status.targetOrgIds.map((id) => orgs.find((org) => org.id === id)?.label ?? "Unavailable org").join(", ")}` : ""}`,
+      ...installedMods.flatMap((mod) =>
+        mod.runtimeStatuses.map((status) => ({
+          label: `${mod.manifest.name} · ${status.label}${status.clientCount === undefined ? "" : ` · ${status.clientCount} clients`}${status.targetOrgIds.length ? ` · ${status.targetOrgIds.map((id) => orgs.find((org) => org.id === id)?.label ?? "Unavailable org").join(", ")}` : ""}`,
           enabled: false,
         })),
       ),
@@ -388,32 +515,28 @@ export const register = Effect.gen(function* () {
         .map((item): Electron.MenuItemConstructorOptions => ({
           label: item.contribution.name,
           click: () => {
-            const extension = installedExtensions.find(
-              (value) => value.manifest.id === item.extensionId,
-            );
-            const command = extension?.manifest.contributions.commands.find(
+            const mod = installedMods.find((value) => value.manifest.id === item.modId);
+            const command = mod?.manifest.contributions.commands.find(
               (value) => value.id === item.contribution.commandId,
             );
             if (command && command.parameters.length === 0)
-              void rpc("extensions.command", {
-                id: item.extensionId,
+              void rpc("mods.command", {
+                id: item.modId,
                 command: command.id,
                 input: {},
               })
                 .then(refresh)
                 .catch(report);
-            else
-              void open(`extensions?extensionId=${encodeURIComponent(item.extensionId)}`).catch(
-                report,
-              );
+            else void open(`mods?modId=${encodeURIComponent(item.modId)}`).catch(report);
           },
         })),
       {
-        label: "Extensions…",
+        label: "Mods…",
         click: () => {
-          void open("extensions").catch(report);
+          void open("mods").catch(report);
         },
       },
+      { label: "Revoke control connections", click: () => control.revoke() },
       { label: "Quit Headful", accelerator: "Command+Q", click: () => Electron.app.quit() },
     ];
     tray.setContextMenu(Electron.Menu.buildFromTemplate(items));

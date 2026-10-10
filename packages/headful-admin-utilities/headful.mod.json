@@ -1,0 +1,404 @@
+{
+  "schemaVersion": 1,
+  "apiVersion": 1,
+  "id": "headful.admin-utilities",
+  "name": "Admin Utilities",
+  "description": "Read-only Salesforce inspection, SOQL, schema exploration and diagnostics in one configurable native workspace.",
+  "version": "0.1.0",
+  "license": "MIT",
+  "source": "bundled",
+  "sourceClassification": "open-source",
+  "entryPoints": {
+    "server": "./dist/index.js"
+  },
+  "defaultEnabled": true,
+  "dependencies": [],
+  "requiredFeatures": ["org-management"],
+  "permissions": [
+    "salesforce:read",
+    "salesforce:records",
+    "salesforce:query",
+    "salesforce:schema",
+    "salesforce:diagnostics",
+    "salesforce:org-navigation",
+    "local:utility-preferences",
+    "local:workspace",
+    "local:settings"
+  ],
+  "settings": [
+    {
+      "key": "compact-results",
+      "label": "Use compact result tables",
+      "type": "boolean",
+      "defaultValue": true
+    }
+  ],
+  "contributions": {
+    "features": [
+      {
+        "id": "headful.admin-utilities/org-shortcuts",
+        "name": "Org shortcuts",
+        "description": "Verified org navigation and personal setup links.",
+        "availability": "available",
+        "defaultEnabled": true,
+        "dependencies": ["org-management"],
+        "configuration": ["Salesforce CLI connection"],
+        "permissions": [],
+        "route": "utilities",
+        "lifecycle": "on-demand"
+      },
+      {
+        "id": "headful.admin-utilities/record-inspector",
+        "name": "Record inspector",
+        "description": "Read accessible fields outside the page layout.",
+        "availability": "available",
+        "defaultEnabled": true,
+        "dependencies": ["org-management"],
+        "configuration": ["Salesforce CLI connection"],
+        "permissions": [],
+        "route": "utilities",
+        "lifecycle": "on-demand"
+      },
+      {
+        "id": "headful.admin-utilities/soql",
+        "name": "SOQL workspace",
+        "description": "Run bounded read-only queries, save them and export results.",
+        "availability": "available",
+        "defaultEnabled": true,
+        "dependencies": ["org-management"],
+        "configuration": ["Salesforce CLI connection"],
+        "permissions": [],
+        "route": "utilities",
+        "lifecycle": "on-demand"
+      },
+      {
+        "id": "headful.admin-utilities/schema",
+        "name": "Object & field explorer",
+        "description": "Browse accessible objects, fields and relationships.",
+        "availability": "available",
+        "defaultEnabled": true,
+        "dependencies": ["org-management"],
+        "configuration": ["Salesforce CLI connection"],
+        "permissions": [],
+        "route": "utilities",
+        "lifecycle": "on-demand"
+      },
+      {
+        "id": "headful.admin-utilities/diagnostics",
+        "name": "Org diagnostics",
+        "description": "Read supported limits, storage, jobs and debug logs.",
+        "availability": "available",
+        "defaultEnabled": true,
+        "dependencies": ["org-management"],
+        "configuration": ["Salesforce CLI connection"],
+        "permissions": [],
+        "route": "utilities",
+        "lifecycle": "on-demand"
+      },
+      {
+        "id": "headful.admin-utilities/backup",
+        "name": "Backup & Recovery",
+        "description": "Explicit cloud protection entry; native credentials are never transferred.",
+        "availability": "available",
+        "defaultEnabled": true,
+        "dependencies": ["org-management"],
+        "configuration": ["Headful Cloud login and selected Salesforce OAuth connection"],
+        "permissions": [],
+        "route": "utilities",
+        "lifecycle": "on-demand"
+      }
+    ],
+    "components": [
+      {
+        "id": "headful.admin-utilities/org-shortcuts",
+        "kind": "panel"
+      },
+      {
+        "id": "headful.admin-utilities/record-inspector",
+        "kind": "panel"
+      },
+      {
+        "id": "headful.admin-utilities/soql-workspace",
+        "kind": "panel"
+      },
+      {
+        "id": "headful.admin-utilities/schema-explorer",
+        "kind": "panel"
+      },
+      {
+        "id": "headful.admin-utilities/diagnostics",
+        "kind": "panel"
+      },
+      {
+        "id": "headful.admin-utilities/search",
+        "kind": "header-control"
+      },
+      {
+        "id": "headful.admin-utilities/favorites",
+        "kind": "header-control"
+      },
+      {
+        "id": "headful.admin-utilities/status",
+        "kind": "header-control"
+      },
+      {
+        "id": "headful.admin-utilities/actions",
+        "kind": "header-control"
+      },
+      {
+        "id": "headful.admin-utilities/secondary",
+        "kind": "header-control"
+      },
+      {
+        "id": "headful.admin-utilities/backup-recovery",
+        "kind": "panel"
+      }
+    ],
+    "navigation": [
+      {
+        "id": "headful.admin-utilities/schema",
+        "name": "Objects & fields",
+        "componentId": "headful.admin-utilities/schema-explorer",
+        "icon": "database",
+        "order": 10,
+        "requiresOrg": true,
+        "requiredFeatures": ["headful.admin-utilities/schema"]
+      },
+      {
+        "id": "headful.admin-utilities/query",
+        "name": "Query data",
+        "componentId": "headful.admin-utilities/soql-workspace",
+        "icon": "table",
+        "order": 20,
+        "requiresOrg": true,
+        "requiredFeatures": ["headful.admin-utilities/soql"]
+      },
+      {
+        "id": "headful.admin-utilities/records",
+        "name": "Inspect record",
+        "componentId": "headful.admin-utilities/record-inspector",
+        "icon": "search",
+        "order": 30,
+        "requiresOrg": true,
+        "requiredFeatures": ["headful.admin-utilities/record-inspector"]
+      },
+      {
+        "id": "headful.admin-utilities/diagnostics",
+        "name": "Org health",
+        "componentId": "headful.admin-utilities/diagnostics",
+        "icon": "activity",
+        "order": 40,
+        "requiresOrg": true,
+        "requiredFeatures": ["headful.admin-utilities/diagnostics"]
+      },
+      {
+        "id": "headful.admin-utilities/orgs",
+        "name": "Setup shortcuts",
+        "componentId": "headful.admin-utilities/org-shortcuts",
+        "icon": "cloud",
+        "order": 50,
+        "requiresOrg": true,
+        "requiredFeatures": ["headful.admin-utilities/org-shortcuts"]
+      },
+      {
+        "id": "headful.admin-utilities/backup",
+        "name": "Backup & Recovery",
+        "componentId": "headful.admin-utilities/backup-recovery",
+        "icon": "database",
+        "order": 45,
+        "requiresOrg": true,
+        "requiredFeatures": ["headful.admin-utilities/backup"]
+      }
+    ],
+    "panels": [
+      {
+        "id": "headful.admin-utilities/org-shortcuts",
+        "name": "Org shortcuts",
+        "componentId": "headful.admin-utilities/org-shortcuts",
+        "workspaceIds": ["headful.admin-utilities/orgs"],
+        "requiredFeatures": ["headful.admin-utilities/org-shortcuts"]
+      },
+      {
+        "id": "headful.admin-utilities/record-inspector",
+        "name": "Record inspector",
+        "componentId": "headful.admin-utilities/record-inspector",
+        "workspaceIds": ["headful.admin-utilities/records"],
+        "requiredFeatures": ["headful.admin-utilities/record-inspector"]
+      },
+      {
+        "id": "headful.admin-utilities/soql-workspace",
+        "name": "SOQL workspace",
+        "componentId": "headful.admin-utilities/soql-workspace",
+        "workspaceIds": ["headful.admin-utilities/query"],
+        "requiredFeatures": ["headful.admin-utilities/soql"]
+      },
+      {
+        "id": "headful.admin-utilities/schema-explorer",
+        "name": "Object & field explorer",
+        "componentId": "headful.admin-utilities/schema-explorer",
+        "workspaceIds": ["headful.admin-utilities/schema"],
+        "requiredFeatures": ["headful.admin-utilities/schema"]
+      },
+      {
+        "id": "headful.admin-utilities/diagnostics",
+        "name": "Org diagnostics",
+        "componentId": "headful.admin-utilities/diagnostics",
+        "workspaceIds": ["headful.admin-utilities/diagnostics"],
+        "requiredFeatures": ["headful.admin-utilities/diagnostics"]
+      }
+    ],
+    "headerControls": [
+      {
+        "id": "headful.admin-utilities/search",
+        "name": "Commands & search",
+        "componentId": "headful.admin-utilities/search",
+        "placement": "primary",
+        "defaultVisible": true,
+        "order": 10,
+        "workspaceIds": [],
+        "requiredFeatures": []
+      },
+      {
+        "id": "headful.admin-utilities/favorites",
+        "name": "Favorite setup links",
+        "componentId": "headful.admin-utilities/favorites",
+        "placement": "primary",
+        "defaultVisible": true,
+        "order": 20,
+        "workspaceIds": [],
+        "requiredFeatures": ["headful.admin-utilities/org-shortcuts"]
+      },
+      {
+        "id": "headful.admin-utilities/status",
+        "name": "Org status",
+        "componentId": "headful.admin-utilities/status",
+        "placement": "primary",
+        "defaultVisible": true,
+        "order": 30,
+        "workspaceIds": [],
+        "requiredFeatures": ["headful.admin-utilities/diagnostics"]
+      },
+      {
+        "id": "headful.admin-utilities/actions",
+        "name": "Workspace actions",
+        "componentId": "headful.admin-utilities/actions",
+        "placement": "overflow",
+        "defaultVisible": true,
+        "order": 40,
+        "workspaceIds": [],
+        "requiredFeatures": ["headful.admin-utilities/org-shortcuts"]
+      },
+      {
+        "id": "headful.admin-utilities/secondary",
+        "name": "Saved queries",
+        "componentId": "headful.admin-utilities/secondary",
+        "placement": "secondary",
+        "defaultVisible": true,
+        "order": 50,
+        "workspaceIds": ["headful.admin-utilities/query"],
+        "requiredFeatures": ["headful.admin-utilities/soql"]
+      }
+    ],
+    "commands": [
+      {
+        "id": "headful.admin-utilities/open-org",
+        "name": "Open selected org",
+        "description": "Open the explicitly selected Salesforce org.",
+        "parameters": [
+          {
+            "key": "org-id",
+            "type": "string",
+            "required": true
+          }
+        ],
+        "requiredFeatures": ["headful.admin-utilities/org-shortcuts"]
+      },
+      {
+        "id": "headful.admin-utilities/open-setup",
+        "name": "Open Salesforce Setup",
+        "description": "Open Setup in the explicitly selected org.",
+        "parameters": [
+          {
+            "key": "org-id",
+            "type": "string",
+            "required": true
+          }
+        ],
+        "requiredFeatures": ["headful.admin-utilities/org-shortcuts"]
+      },
+      {
+        "id": "headful.admin-utilities/open-users-setup",
+        "name": "Open User Setup",
+        "description": "Open Salesforce user administration for this org.",
+        "parameters": [
+          {
+            "key": "org-id",
+            "type": "string",
+            "required": true
+          }
+        ],
+        "requiredFeatures": ["headful.admin-utilities/org-shortcuts"]
+      },
+      {
+        "id": "headful.admin-utilities/open-permission-sets-setup",
+        "name": "Open Permission Set Setup",
+        "description": "Open Salesforce permission-set administration for this org.",
+        "parameters": [
+          {
+            "key": "org-id",
+            "type": "string",
+            "required": true
+          }
+        ],
+        "requiredFeatures": ["headful.admin-utilities/org-shortcuts"]
+      },
+      {
+        "id": "headful.admin-utilities/connection-status",
+        "name": "Inspect connection status",
+        "description": "Show the selected imported connection identity and recorded status.",
+        "parameters": [
+          {
+            "key": "org-id",
+            "type": "string",
+            "required": true
+          }
+        ],
+        "requiredFeatures": ["headful.admin-utilities/org-shortcuts"]
+      }
+    ],
+    "actions": [
+      {
+        "id": "headful.admin-utilities/open-setup",
+        "name": "Salesforce Setup",
+        "commandId": "headful.admin-utilities/open-setup",
+        "icon": "external-link",
+        "placement": "overflow",
+        "order": 20,
+        "workspaceIds": [],
+        "requiresOrg": true,
+        "requiredFeatures": ["headful.admin-utilities/org-shortcuts"]
+      }
+    ],
+    "surfaces": [
+      {
+        "id": "overview",
+        "name": "About Admin Utilities",
+        "description": "Open-source module status and scope.",
+        "requiredFeatures": []
+      }
+    ],
+    "routes": [
+      {
+        "id": "overview",
+        "name": "Admin Utilities",
+        "path": "/mods/headful.admin-utilities/overview",
+        "surfaceId": "overview",
+        "requiredFeatures": []
+      }
+    ],
+    "hooks": ["activate", "deactivate", "feature-changed"]
+  },
+  "execution": "native",
+  "hostApi": "^1.0.0",
+  "platforms": ["mac-arm64", "mac-x64"]
+}

@@ -20,7 +20,7 @@ const org = z.strictObject({ orgId: identifier });
 const queryId = z.string().regex(/^[A-Za-z0-9_-]{8,100}$/);
 const headerControlId = z
   .string()
-  .regex(/^[a-z][a-z0-9-]*(?:\/[a-z][a-z0-9-]*){1,2}$/)
+  .regex(/^[a-z][a-z0-9.-]*(?:\/[a-z][a-z0-9-]*){1,2}$/)
   .max(150);
 const layout = z.strictObject({
   order: z.array(headerControlId).max(50),
@@ -29,7 +29,7 @@ const layout = z.strictObject({
 export const workspacePreferencesSchema = z.strictObject({
   global: layout,
   overrides: z
-    .record(z.string().regex(/^[a-z][a-z0-9/-]{0,100}$/), layout)
+    .record(z.string().regex(/^[a-z][a-z0-9./-]{0,128}$/), layout)
     .refine((values) => Object.keys(values).length <= 50, "Use at most 50 workspace overrides."),
 });
 export const headfulUtilityInputSchemas = {
@@ -90,6 +90,7 @@ export const utilityFieldSchema = z.strictObject({
   createable: z.boolean(),
   updateable: z.boolean(),
   calculated: z.boolean(),
+  calculatedFormula: z.string().max(20000).nullable(),
   referenceTo: z.array(utilityApiNameSchema).max(100),
   relationshipName: z.string().max(100).nullable(),
   picklistValues: z
@@ -149,7 +150,14 @@ const logSchema = z.strictObject({
   userId: sfId.nullable(),
 });
 export const headfulUtilityResultSchemas = {
-  "utilities.backup.location": z.strictObject({ url: z.url().refine((value) => { const url = new URL(value); return url.origin === "https://headful.cloud" && url.pathname === "/backup"; }), executor: z.literal("cloud"), cloudAuthorization: z.literal("required") }),
+  "utilities.backup.location": z.strictObject({
+    url: z.url().refine((value) => {
+      const url = new URL(value);
+      return url.origin === "https://headful.cloud" && url.pathname === "/backup";
+    }),
+    executor: z.literal("cloud"),
+    cloudAuthorization: z.literal("required"),
+  }),
   "utilities.record.get": z.strictObject({
     org: orgSchema,
     object: utilityApiNameSchema,
@@ -271,99 +279,104 @@ export const headfulUtilityResultSchemas = {
 } as const;
 export type HeadfulUtilityOperation = keyof typeof headfulUtilityInputSchemas;
 export const utilityOperationPolicies = {
-  "utilities.backup.location": { feature: "headful.admin-utilities/backup", permission: "salesforce:org-navigation", scope: "headful:read", desktopOnly: true },
+  "utilities.backup.location": {
+    feature: "headful.admin-utilities/backup",
+    permission: "salesforce:org-navigation",
+    scope: "headful:read",
+    desktopOnly: true,
+  },
   "utilities.record.get": {
-    feature: "admin-utilities/record-inspector",
+    feature: "headful.admin-utilities/record-inspector",
     permission: "salesforce:records",
     scope: "headful:inspect",
     desktopOnly: false,
   },
   "utilities.query.run": {
-    feature: "admin-utilities/soql",
+    feature: "headful.admin-utilities/soql",
     permission: "salesforce:query",
     scope: "headful:query",
     desktopOnly: false,
   },
   "utilities.query.cancel": {
-    feature: "admin-utilities/soql",
+    feature: "headful.admin-utilities/soql",
     permission: "salesforce:query",
     scope: "headful:query",
     desktopOnly: false,
   },
   "utilities.objects.list": {
-    feature: "admin-utilities/schema",
+    feature: "headful.admin-utilities/schema",
     permission: "salesforce:schema",
     scope: "headful:schema",
     desktopOnly: false,
   },
   "utilities.objects.describe": {
-    feature: "admin-utilities/schema",
+    feature: "headful.admin-utilities/schema",
     permission: "salesforce:schema",
     scope: "headful:schema",
     desktopOnly: false,
   },
   "utilities.diagnostics": {
-    feature: "admin-utilities/diagnostics",
+    feature: "headful.admin-utilities/diagnostics",
     permission: "salesforce:diagnostics",
     scope: "headful:diagnostics",
     desktopOnly: false,
   },
   "utilities.logs.list": {
-    feature: "admin-utilities/diagnostics",
+    feature: "headful.admin-utilities/diagnostics",
     permission: "salesforce:diagnostics",
     scope: "headful:diagnostics",
     desktopOnly: false,
   },
   "utilities.logs.get": {
-    feature: "admin-utilities/diagnostics",
+    feature: "headful.admin-utilities/diagnostics",
     permission: "salesforce:diagnostics",
     scope: "headful:diagnostics",
     desktopOnly: false,
   },
   "utilities.org.open": {
-    feature: "admin-utilities/org-shortcuts",
+    feature: "headful.admin-utilities/org-shortcuts",
     permission: "salesforce:org-navigation",
     scope: "headful:read",
     desktopOnly: true,
   },
   "utilities.saved.list": {
-    feature: "admin-utilities/soql",
+    feature: "headful.admin-utilities/soql",
     permission: "local:utility-preferences",
     scope: "headful:query",
     desktopOnly: false,
   },
   "utilities.saved.set": {
-    feature: "admin-utilities/soql",
+    feature: "headful.admin-utilities/soql",
     permission: "local:utility-preferences",
     scope: "headful:query",
     desktopOnly: true,
   },
   "utilities.saved.remove": {
-    feature: "admin-utilities/soql",
+    feature: "headful.admin-utilities/soql",
     permission: "local:utility-preferences",
     scope: "headful:query",
     desktopOnly: true,
   },
   "utilities.history.list": {
-    feature: "admin-utilities/soql",
+    feature: "headful.admin-utilities/soql",
     permission: "local:utility-preferences",
     scope: "headful:query",
     desktopOnly: false,
   },
   "utilities.favorites.list": {
-    feature: "admin-utilities/org-shortcuts",
+    feature: "headful.admin-utilities/org-shortcuts",
     permission: "local:utility-preferences",
     scope: "headful:read",
     desktopOnly: false,
   },
   "utilities.favorites.set": {
-    feature: "admin-utilities/org-shortcuts",
+    feature: "headful.admin-utilities/org-shortcuts",
     permission: "local:utility-preferences",
     scope: "headful:read",
     desktopOnly: true,
   },
   "utilities.favorites.remove": {
-    feature: "admin-utilities/org-shortcuts",
+    feature: "headful.admin-utilities/org-shortcuts",
     permission: "local:utility-preferences",
     scope: "headful:read",
     desktopOnly: true,

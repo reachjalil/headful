@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "publicMods": [
+    {
+      "id": "headful.admin-utilities",
+      "source": "packages/headful-admin-utilities",
+      "license": "MIT"
+    }
+  ],
+  "hostApi": "1.0.0"
+}
