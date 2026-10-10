@@ -1,8 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { headfulUtilityResultSchemas } from "@t3tools/contracts/headful-utilities";
-import { copyLocal } from "./data";
-import { Empty, UtilityPanel, useUtilityTask } from "./primitives";
-import { orgEnvironment, type UtilityComponentProps } from "./types";
+import { UtilityPanel, useUtilityTask } from "./primitives";
+import { type UtilityComponentProps } from "./types";
 import type { z } from "zod";
 
 type Favorites = z.infer<(typeof headfulUtilityResultSchemas)["utilities.favorites.list"]>;
@@ -102,7 +101,7 @@ export function FavoriteLinks(props: UtilityComponentProps) {
             type="button"
             onClick={() => {
               setOpen(false);
-              props.onNavigate("admin-utilities/org-shortcuts");
+              props.onNavigate("headful.admin-utilities/org-shortcuts");
             }}
           >
             Manage shortcuts →
@@ -118,23 +117,64 @@ export function OrgShortcuts(props: UtilityComponentProps) {
   const [label, setLabel] = useState("");
   const [destination, setDestination] = useState<Destination>("setup");
   const [recordId, setRecordId] = useState("");
+  const [removing, setRemoving] = useState<string | null>(null);
+  const removal = useRef<string | null>(null);
+  const scope = useRef(0);
   const task = useUtilityTask();
   const load = async () =>
     headfulUtilityResultSchemas["utilities.favorites.list"].parse(
       await props.dispatch("utilities.favorites.list", { orgId: props.orgId }),
     );
   useEffect(() => {
+    scope.current++;
+    removal.current = null;
+    setRemoving(null);
     task.reset();
     setData(null);
     setLabel("");
     setRecordId("");
     if (props.orgId) void task.run(load, setData);
-    return task.reset;
+    return () => {
+      scope.current++;
+      task.reset();
+    };
   }, [props.orgId, task.run, task.reset]);
+  const remove = (favorite: Favorites["favorites"][number]) => {
+    if (removal.current) return;
+    const current = scope.current;
+    removal.current = favorite.id;
+    setRemoving(favorite.id);
+    void task
+      .run(
+        async () => {
+          const receipt = headfulUtilityResultSchemas["utilities.favorites.remove"].parse(
+            await props.dispatch("utilities.favorites.remove", {
+              orgId: favorite.orgId,
+              id: favorite.id,
+            }),
+          );
+          if (!receipt.removed)
+            throw new Error("The shortcut was not removed. Check it and try again.");
+          return favorite.id;
+        },
+        (id) => {
+          setData(
+            (value) =>
+              value && { ...value, favorites: value.favorites.filter((item) => item.id !== id) },
+          );
+          props.onFeedback("Removed the shortcut for this org.");
+        },
+      )
+      .finally(() => {
+        if (scope.current !== current) return;
+        removal.current = null;
+        setRemoving(null);
+      });
+  };
   return (
     <UtilityPanel
-      title="Org shortcuts"
-      description="Switch your workspace target or open a Salesforce Setup page. Favorites stay with the org where you saved them."
+      title="Salesforce Setup shortcuts"
+      description="Open a Setup page in this org. Favorites stay with this connection."
       busy={task.busy}
       error={task.error}
       actions={
@@ -145,77 +185,10 @@ export function OrgShortcuts(props: UtilityComponentProps) {
         )
       }
     >
-      <div className="hf-utility-org-grid">
-        {props.orgs.map((org) => (
-          <article
-            className={`hf-utility-org ${org.id === props.orgId ? "selected" : ""}`}
-            key={org.id}
-          >
-            <div className="hf-card-heading">
-              <OrgCloud color={org.color} />
-              <div className="hf-utility-grow">
-                <strong>{org.label}</strong>
-                <small>{org.alias || org.username}</small>
-              </div>
-              <span className="hf-badge">{orgEnvironment(org)}</span>
-            </div>
-            <dl className="hf-utility-details">
-              <div>
-                <dt>Verified org</dt>
-                <dd>
-                  <code>{org.salesforceOrgId}</code>
-                </dd>
-              </div>
-              <div>
-                <dt>Authenticated user</dt>
-                <dd>{org.username}</dd>
-              </div>
-              <div>
-                <dt>Connection</dt>
-                <dd>{org.status}</dd>
-              </div>
-            </dl>
-            <div className="hf-actions">
-              <button
-                className="hf-button"
-                type="button"
-                aria-pressed={org.id === props.orgId}
-                onClick={() => props.onOrgChange(org.id)}
-              >
-                {org.id === props.orgId ? "Current workspace org" : "Use in workspace"}
-              </button>
-              <button
-                className="hf-button"
-                type="button"
-                onClick={() =>
-                  void task.run(
-                    () =>
-                      props.dispatch("utilities.org.open", { orgId: org.id, destination: "home" }),
-                    () => props.onFeedback("Opened the selected org."),
-                  )
-                }
-              >
-                Open ↗
-              </button>
-              <button
-                className="hf-icon-button"
-                type="button"
-                aria-label={`Copy ${org.label} org ID`}
-                onClick={() => void copyLocal(org.salesforceOrgId, props.onFeedback)}
-              >
-                ⧉
-              </button>
-            </div>
-          </article>
-        ))}
-      </div>
-      {props.orgs.length === 0 && (
-        <Empty>No connected orgs yet. Connect or import an org from Your orgs.</Empty>
-      )}
       {props.orgId && (
         <section className="hf-card">
-          <h2>Setup shortcuts</h2>
-          <div className="hf-actions">
+          <h2>Open in Salesforce</h2>
+          <div className="hf-shortcut-list">
             {destinations
               .filter((item) => item.value !== "record")
               .map((item) => (
@@ -245,111 +218,114 @@ export function OrgShortcuts(props: UtilityComponentProps) {
         <section className="hf-card">
           <h2>Favorites for this org</h2>
           <div className="hf-utility-saved-list">
-            {data?.favorites.map((favorite) => (
-              <div key={favorite.id}>
-                <button
-                  className="hf-utility-link"
-                  type="button"
-                  onClick={() =>
-                    void task.run(
-                      () =>
-                        props.dispatch("utilities.org.open", {
-                          orgId: favorite.orgId,
-                          destination: favorite.destination,
-                          ...(favorite.recordId ? { recordId: favorite.recordId } : {}),
-                        }),
-                      () => props.onFeedback("Opened the favorite in the selected org."),
-                    )
-                  }
-                >
-                  {favorite.label} ↗
-                </button>
-                <small>{favorite.destination}</small>
-                <button
-                  className="hf-icon-button"
-                  type="button"
-                  aria-label={`Remove ${favorite.label} favorite`}
-                  disabled={task.busy}
-                  onClick={() =>
-                    void task.run(async () => {
-                      await props.dispatch("utilities.favorites.remove", {
-                        orgId: favorite.orgId,
-                        id: favorite.id,
-                      });
-                      return load();
-                    }, setData)
-                  }
-                >
-                  ×
-                </button>
-              </div>
-            ))}
+            {data?.favorites
+              .filter((favorite) => favorite.id !== removing)
+              .map((favorite) => (
+                <div key={favorite.id}>
+                  <button
+                    className="hf-utility-link"
+                    type="button"
+                    disabled={task.busy}
+                    onClick={() =>
+                      void task.run(
+                        () =>
+                          props.dispatch("utilities.org.open", {
+                            orgId: favorite.orgId,
+                            destination: favorite.destination,
+                            ...(favorite.recordId ? { recordId: favorite.recordId } : {}),
+                          }),
+                        () => props.onFeedback("Opened the favorite in the selected org."),
+                      )
+                    }
+                  >
+                    {favorite.label} ↗
+                  </button>
+                  <small>{favorite.destination}</small>
+                  <button
+                    className="hf-icon-button"
+                    type="button"
+                    aria-label={`Remove ${favorite.label} favorite`}
+                    disabled={task.busy}
+                    onClick={() => remove(favorite)}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
           </div>
+          {removing && (
+            <p className="hf-note" role="status">
+              Removing shortcut…
+            </p>
+          )}
           {data?.favorites.length === 0 && (
             <p className="hf-note">Save a destination below. Favorites stay with this exact org.</p>
           )}
-          <form
-            className="hf-utility-toolbar"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void task.run(
-                async () => {
-                  await props.dispatch("utilities.favorites.set", {
-                    orgId: props.orgId,
-                    label,
-                    destination,
-                    ...(destination === "record" ? { recordId } : {}),
-                  });
-                  return load();
-                },
-                (result) => {
-                  setData(result);
-                  setLabel("");
-                  setRecordId("");
-                  props.onFeedback("Saved the shortcut for this org.");
-                },
-              );
-            }}
-          >
-            <label className="hf-field hf-utility-grow">
-              Name
-              <input
-                value={label}
-                onChange={(event) => setLabel(event.target.value)}
-                maxLength={100}
-                required
-                placeholder="Useful setup page"
-              />
-            </label>
-            <label className="hf-field">
-              Destination
-              <select
-                value={destination}
-                onChange={(event) => setDestination(event.target.value as Destination)}
-              >
-                {destinations.map((item) => (
-                  <option key={item.value} value={item.value}>
-                    {item.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            {destination === "record" && (
-              <label className="hf-field">
-                Record ID
+          <details className="hf-advanced">
+            <summary>Save a shortcut</summary>
+            <form
+              className="hf-utility-toolbar"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void task.run(
+                  async () => {
+                    await props.dispatch("utilities.favorites.set", {
+                      orgId: props.orgId,
+                      label,
+                      destination,
+                      ...(destination === "record" ? { recordId } : {}),
+                    });
+                    return load();
+                  },
+                  (result) => {
+                    setData(result);
+                    setLabel("");
+                    setRecordId("");
+                    props.onFeedback("Saved the shortcut for this org.");
+                  },
+                );
+              }}
+            >
+              <label className="hf-field hf-utility-grow">
+                Name
                 <input
-                  value={recordId}
-                  onChange={(event) => setRecordId(event.target.value)}
-                  pattern="[A-Za-z0-9]{15}([A-Za-z0-9]{3})?"
-                  maxLength={18}
+                  value={label}
+                  onChange={(event) => setLabel(event.target.value)}
+                  maxLength={100}
                   required
+                  placeholder="Useful setup page"
                 />
               </label>
-            )}
-            <button className="hf-button hf-primary" disabled={task.busy}>
-              Save favorite
-            </button>
-          </form>
+              <label className="hf-field">
+                Destination
+                <select
+                  value={destination}
+                  onChange={(event) => setDestination(event.target.value as Destination)}
+                >
+                  {destinations.map((item) => (
+                    <option key={item.value} value={item.value}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {destination === "record" && (
+                <label className="hf-field">
+                  Record ID
+                  <input
+                    value={recordId}
+                    onChange={(event) => setRecordId(event.target.value)}
+                    pattern="[A-Za-z0-9]{15}([A-Za-z0-9]{3})?"
+                    maxLength={18}
+                    required
+                  />
+                </label>
+              )}
+              <button className="hf-button hf-primary" disabled={task.busy}>
+                Save favorite
+              </button>
+            </form>
+          </details>
         </section>
       )}
     </UtilityPanel>

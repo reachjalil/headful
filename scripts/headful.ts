@@ -1,19 +1,24 @@
 #!/usr/bin/env node
-import { spawn } from "node:child_process";
-import { fileURLToPath } from "node:url";
-import { resolve } from "node:path";
-import { pathToFileURL } from "node:url";
-import { resolveHeadfulExtensionPackages } from "./lib/headful-extension-package.ts";
-const root = fileURLToPath(new URL("..", import.meta.url));
-if (process.platform !== "darwin")
+// @effect-diagnostics nodeBuiltinImport:off globalConsole:off
+import * as Effect from "effect/Effect";
+import {
+  HostProcessPlatform,
+  HostProcessArchitecture,
+} from "../packages/shared/src/hostProcess.ts";
+import * as NodeChildProcess from "node:child_process";
+import * as NodeURL from "node:url";
+import * as NodePath from "node:path";
+
+const root = NodeURL.fileURLToPath(new URL("..", import.meta.url));
+if (Effect.runSync(HostProcessPlatform) !== "darwin")
   throw new Error(
     "Headful early access development and packaging currently target macOS. Mobile source remains available upstream.",
   );
 const mode = process.argv[2];
-const env = {
+const env: NodeJS.ProcessEnv = {
   ...process.env,
-  HEADFUL_HOME: resolve(root, ".headful-dev"),
-  T3CODE_HOME: resolve(root, ".headful-dev"),
+  HEADFUL_HOME: NodePath.resolve(root, ".headful-dev"),
+  T3CODE_HOME: NodePath.resolve(root, ".headful-dev"),
   T3CODE_DISABLE_AUTO_UPDATE: "true",
   T3CODE_POSTHOG_KEY: "",
   T3CODE_TELEMETRY_ENABLED: "false",
@@ -26,7 +31,7 @@ for (const key of Object.keys(env))
   if (/OTLP.*(?:URL|TOKEN)|POSTHOG_KEY|RELAY.*TOKEN/.test(key)) env[key] = "";
 async function run(command: string, args: string[]) {
   await new Promise<void>((resolve, reject) => {
-    const child = spawn(command, args, { cwd: root, env, stdio: "inherit" });
+    const child = NodeChildProcess.spawn(command, args, { cwd: root, env, stdio: "inherit" });
     const stop = () => {
       child.kill("SIGTERM");
     };
@@ -52,34 +57,33 @@ if (mode === "setup") {
     "install",
   ]);
 }
-if (["setup", "dev", "check", "package"].includes(mode ?? "")) {
+if (["setup", "dev", "check", "test", "package"].includes(mode ?? "")) {
+  await run(pnpm, ["--filter", "@headful/mod-sdk", "run", "build"]);
   await run(pnpm, ["--filter", "@headfulcloud/admin-utilities", "run", "build"]);
 }
-if (mode === "dev" || mode === "package") {
-  const installed = resolveHeadfulExtensionPackages(root).find(
-    (extension) => extension.packageName === "@headfulcloud/mcp-apps",
-  );
-  if (installed) {
-    const { getMcpAppsAssets } = await import(pathToFileURL(installed.entry).href);
-    const assets = getMcpAppsAssets();
-    Object.assign(env, {
-      HEADFUL_MCP_BRIDGE: assets.bridgeScript,
-      HEADFUL_MCP_ASSETS: assets.assetsDirectory,
-    });
-  }
+if (["setup", "dev", "check", "package"].includes(mode ?? "")) {
+  await run(process.execPath, ["scripts/headful-mods.mjs", "public-build"]);
+  env.HEADFUL_MODS_DIR =
+    process.env.HEADFUL_DEVELOPMENT_MODS_DIR || NodePath.resolve(root, "artifacts/mods");
 }
 if (mode === "setup") {
-  console.log(
-    "Open-source Headful is ready. Optional private Extensions can be linked separately.",
-  );
+  console.log("Open-source Headful is ready. Mods use explicit compiled artifacts.");
 } else if (mode === "dev") {
   await run(process.execPath, ["scripts/build-headful-icons.ts"]);
-  await run(pnpm, ["dev:desktop", "--home-dir", env.HEADFUL_HOME]);
+  await run(pnpm, ["dev:desktop", "--home-dir", env.HEADFUL_HOME!]);
 } else if (mode === "check") {
   await run(pnpm, ["--filter", "t3", "typecheck"]);
   await run(pnpm, ["--filter", "@t3tools/desktop", "typecheck"]);
   await run(pnpm, ["--filter", "@t3tools/web", "typecheck"]);
 } else if (mode === "test") {
+  // Build the synthetic artifact here so the test command also works in a clean clone.
+  await run(process.execPath, ["examples/hello-mod/build.mjs"]);
+  await run(process.execPath, [
+    "scripts/headful-mods.mjs",
+    "pack",
+    "examples/hello-mod",
+    "artifacts/mods/org.example.hello.headfulmod",
+  ]);
   await run(pnpm, [
     "exec",
     "vp",
@@ -88,11 +92,11 @@ if (mode === "setup") {
     "apps/server/src/headful",
     "apps/desktop/src/headful",
     "apps/web/src/headful",
-    "scripts/lib/headful-extension-package.test.ts",
+    "scripts/lib/headful-mod-artifact.test.ts",
     "packages/headful-admin-utilities",
   ]);
 } else if (mode === "package") {
-  if (process.arch !== "arm64")
+  if (Effect.runSync(HostProcessArchitecture) !== "arm64")
     throw new Error("This initial artifact command is checked on Apple Silicon only.");
   await run(process.execPath, ["scripts/build-headful-icons.ts"]);
   await run(process.execPath, [
@@ -106,7 +110,7 @@ if (mode === "setup") {
     "--build-version",
     "0.3.0",
     "--output-dir",
-    resolve(root, "artifacts/headful"),
+    NodePath.resolve(root, "artifacts/headful"),
     ...process.argv.slice(3),
   ]);
 } else

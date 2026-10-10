@@ -428,29 +428,26 @@
         min-height: 100%;
         align-items: center;
         justify-content: center;
-        background: inherit;
-        color: inherit;
+        background: #0a0a0a;
+        color: #ededed;
       }
 
       html[data-theme-selected="true"] #boot-shell {
-        background: var(--boot-background);
-        color: var(--boot-foreground);
+        background: #0a0a0a;
+        color: #ededed;
       }
 
       #boot-shell-card {
-        position: relative;
-        z-index: 1;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        width: 96px;
-        height: 96px;
+        display: grid;
+        justify-items: center;
+        gap: 12px;
+        color: #a1a1a1;
+        font-size: 13px;
       }
 
-      #boot-shell-logo {
-        width: 64px;
-        height: 64px;
-        object-fit: contain;
+      #boot-shell-helmet {
+        width: 144px;
+        height: 144px;
       }
 
       #boot-error {
@@ -482,8 +479,15 @@
   <body>
     <div id="root">
       <div id="boot-shell">
-        <div id="boot-shell-card" aria-label="Headful splash screen">
-          <img id="boot-shell-logo" src="/apple-touch-icon.png" alt="Headful" />
+        <div id="boot-shell-card" role="status" aria-label="Opening Headful">
+          <img
+            id="boot-shell-helmet"
+            src="/src/headful/helmet.svg"
+            alt=""
+            width="144"
+            height="144"
+          />
+          <span>Opening Headful…</span>
         </div>
       </div>
     </div>

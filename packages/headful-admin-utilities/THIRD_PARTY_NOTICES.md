@@ -1,6 +1,6 @@
 # Admin Utilities third-party notices
 
-The bundled public portable schemas retain the Apache-2.0 notices from Headful Cloud. Zod retains its MIT license. Complete license texts are distributed in dist/licenses. The utility extension source is independently MIT-licensed.
+The bundled public portable schemas retain the Apache-2.0 notices from Headful Cloud. Zod retains its MIT license. Complete license texts are distributed in dist/licenses. The utility mod source is independently MIT-licensed.
 
 MIT License
 

@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+/* oxlint-disable shadcn/no-unknown-classes -- Tests select scoped Headful shell CSS. */
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
@@ -6,7 +7,7 @@ import {
   headfulUtilityInputSchemas,
   workspacePreferencesSchema,
 } from "@t3tools/contracts/headful-utilities";
-import type { resolveHeadfulContributions } from "@t3tools/contracts/headful-extensions";
+import type { resolveHeadfulContributions } from "@t3tools/contracts/headful-mods";
 import type { UtilityComponentProps } from "@headfulcloud/admin-utilities/web";
 import { HeadfulWorkspaceShell } from "./HeadfulWorkspaceShell";
 
@@ -19,13 +20,13 @@ const contributions: ReturnType<typeof resolveHeadfulContributions> = {
   commands: [],
   headerControls: [
     {
-      extensionId: "admin-utilities",
+      modId: "headful.admin-utilities",
       available: true,
       unavailableReason: null,
       contribution: {
-        id: "admin-utilities/search",
+        id: "headful.admin-utilities/search",
         name: "Search",
-        componentId: "admin-utilities/search",
+        componentId: "headful.admin-utilities/search",
         placement: "primary",
         defaultVisible: true,
         order: 0,
@@ -34,13 +35,13 @@ const contributions: ReturnType<typeof resolveHeadfulContributions> = {
       },
     },
     {
-      extensionId: "admin-utilities",
+      modId: "headful.admin-utilities",
       available: true,
       unavailableReason: null,
       contribution: {
-        id: "admin-utilities/status",
+        id: "headful.admin-utilities/status",
         name: "Connection status",
-        componentId: "admin-utilities/status",
+        componentId: "headful.admin-utilities/status",
         placement: "secondary",
         defaultVisible: true,
         order: 1,
@@ -113,7 +114,7 @@ describe("shared workspace customization", () => {
     const onOrgChange = vi.fn();
     const context: UtilityComponentProps = {
       orgId: "example-production",
-      workspaceId: "admin-utilities/query",
+      workspaceId: "headful.admin-utilities/query",
       dispatch,
       onOrgChange,
       onNavigate: vi.fn(),
@@ -131,7 +132,7 @@ describe("shared workspace customization", () => {
         },
       ],
     };
-    const render = async (workspaceId = "admin-utilities/query", pinned = false) => {
+    const render = async (workspaceId = "headful.admin-utilities/query", pinned = false) => {
       await act(async () =>
         root.render(
           <div className="hf-shell">
@@ -164,9 +165,9 @@ describe("shared workspace customization", () => {
       container.querySelector<HTMLButtonElement>('[aria-label="Move Connection status earlier"]')!,
     );
     await click(button("Save preferences"));
-    expect(stored.overrides["admin-utilities/query"]).toEqual({
-      order: ["admin-utilities/status", "admin-utilities/search"],
-      hidden: ["admin-utilities/search"],
+    expect(stored.overrides["headful.admin-utilities/query"]).toEqual({
+      order: ["headful.admin-utilities/status", "headful.admin-utilities/search"],
+      hidden: ["headful.admin-utilities/search"],
     });
     expect(container.querySelectorAll(".hf-workspace-control")).toHaveLength(1);
     const target = container.querySelector<HTMLSelectElement>(
@@ -175,15 +176,15 @@ describe("shared workspace customization", () => {
     expect(target.value).toBe("example-production");
     expect(onOrgChange).not.toHaveBeenCalled();
     expect(document.activeElement).toBe(customize);
-    await render("admin-utilities/schema");
+    await render("headful.admin-utilities/schema");
     expect(container.querySelectorAll(".hf-workspace-control")).toHaveLength(2);
     await render();
     expect(container.querySelectorAll(".hf-workspace-control")).toHaveLength(1);
     await click(button("Customize workspace"));
     await click(button("Use global defaults"));
-    expect(stored.overrides["admin-utilities/query"]).toBeUndefined();
+    expect(stored.overrides["headful.admin-utilities/query"]).toBeUndefined();
     expect(container.querySelectorAll(".hf-workspace-control")).toHaveLength(2);
-    await render("admin-utilities/query", true);
+    await render("headful.admin-utilities/query", true);
     expect(
       container.querySelector<HTMLSelectElement>('[aria-label="Target Salesforce org"]')?.disabled,
     ).toBe(true);

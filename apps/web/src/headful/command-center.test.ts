@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vite-plus/test";
 import type { HeadfulResult } from "@t3tools/contracts/headful";
 import {
-  headfulExtensionDescriptorSchema,
-  type HeadfulExtensionDescriptor,
-} from "@t3tools/contracts/headful-extensions";
+  headfulModDescriptorSchema,
+  type HeadfulModDescriptor,
+} from "@t3tools/contracts/headful-mods";
 import {
   buildNotifications,
   filterSearchEntries,
@@ -18,7 +18,7 @@ const org = { id: orgId, label: "Acme Production", status: "connected", connecti
 const empty: NotificationsInput = {
   orgs: [org],
   cli: { state: "ready", selected: "/usr/local/bin/sf" },
-  extensions: [],
+  mods: [],
   workflows: [],
   activity: [],
   workspaceEnabled: true,
@@ -72,18 +72,16 @@ function event(
   return { id, kind, org_id: orgId, target_id: proposalId, created_at: createdAt };
 }
 
-function extension(
-  values: Partial<Omit<HeadfulExtensionDescriptor, "manifest">> = {},
-): HeadfulExtensionDescriptor {
-  return headfulExtensionDescriptorSchema.parse({
+function mod(values: Partial<Omit<HeadfulModDescriptor, "manifest">> = {}): HeadfulModDescriptor {
+  return headfulModDescriptorSchema.parse({
     manifest: {
       schemaVersion: 1,
+      execution: "native",
       apiVersion: 1,
-      id: "connect",
+      id: "example.connect",
       name: "Headful Connect",
       description: "Optional companion connection.",
       version: "1.0.0",
-      packageName: "@headfulcloud/connect",
       license: "Proprietary",
       source: "bundled",
     },
@@ -240,31 +238,31 @@ describe("notification projections", () => {
     }
   });
 
-  it("suppresses disabled extensions and exposes controlled status text without raw errors", () => {
+  it("suppresses disabled mods and exposes controlled status text without raw errors", () => {
     const error = { code: "activation_failed", message: "private secret error details" };
     expect(
       buildNotifications({
         ...empty,
-        extensions: [extension({ enabled: false, status: "error", error })],
+        mods: [mod({ enabled: false, status: "failed", error })],
       }),
     ).toEqual([]);
     const notifications = buildNotifications({
       ...empty,
-      extensions: [extension({ status: "error", error })],
+      mods: [mod({ status: "failed", error })],
     });
     expect(notifications).toHaveLength(1);
     expect(JSON.stringify(notifications)).not.toContain(error.message);
-    expect(notifications[0]?.destination).toEqual({ kind: "extension", extensionId: "connect" });
+    expect(notifications[0]?.destination).toEqual({ kind: "mod", modId: "example.connect" });
     expect(
       buildNotifications({
         ...empty,
-        extensions: [
-          extension({
+        mods: [
+          mod({
             runtimeStatuses: [{ id: "relay", label: "Relay", state: "offline", targetOrgIds: [] }],
           }),
         ],
       })[0],
-    ).toMatchObject({ id: "extension:connect:relay:offline", level: "warning" });
+    ).toMatchObject({ id: "mod:example.connect:relay:offline", level: "warning" });
   });
 
   it("surfaces CLI and identity recovery and bounds the inbox", () => {

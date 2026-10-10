@@ -1,0 +1,29 @@
+[data-headful-canvas] {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: var(--boot-background, #fff);
+  -webkit-app-region: drag;
+}
+
+[data-headful-indicator] {
+  width: 20px;
+  height: 20px;
+  border: 2px solid color-mix(in srgb, var(--boot-accent, #626dd2) 18%, transparent);
+  border-top-color: var(--boot-accent, #626dd2);
+  border-radius: 50%;
+  animation: hf-initial-spin 0.8s linear infinite;
+}
+
+@keyframes hf-initial-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-headful-indicator] {
+    animation: none;
+  }
+}

@@ -1,12 +1,12 @@
-import type { HeadfulExtensionDefinition } from "../../../../packages/contracts/src/headful-extensions.ts";
+import type { HeadfulModDefinition } from "../../../../packages/contracts/src/headful-mods.ts";
 import type { HeadfulAuthority } from "../../../../packages/contracts/src/headful.ts";
 import { currentIso } from "./domain/security.ts";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 // @effect-diagnostics-next-line nodeBuiltinImport:off - isolated temporary fixture files, never live Salesforce or Headful data.
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import * as NodeFS from "node:fs";
+import * as NodeOS from "node:os";
 // @effect-diagnostics-next-line nodeBuiltinImport:off - isolated temporary fixture files, never live Salesforce or Headful data.
-import { join } from "node:path";
+import * as NodePath from "node:path";
 import { makeHeadfulRuntime } from "./WorkspaceService.ts";
 import { LocalStore } from "./Store.ts";
 import { CliAdapter } from "./SalesforceCli.ts";
@@ -186,15 +186,17 @@ function provider(sfOrgId: string) {
 }
 
 const desktop = { kind: "desktop" as const };
-const mcpExtensionFixture: HeadfulExtensionDefinition = {
+const mcpModFixture: HeadfulModDefinition = {
+  nativeTrusted: true,
+  hostPermissions: [],
   manifest: {
     schemaVersion: 1,
+    execution: "native",
     apiVersion: 1,
-    id: "mcp-apps",
+    id: "headful.mcp-apps",
     name: "Fixture MCP",
-    description: "Test-only extension feature gates.",
+    description: "Test-only mod feature gates.",
     version: "1.0.0",
-    packageName: "@headfulcloud/mcp-apps",
     license: "MIT",
     source: "bundled",
     defaultEnabled: true,
@@ -221,14 +223,16 @@ const mcpExtensionFixture: HeadfulExtensionDefinition = {
   },
   activate: async () => ({ dispose() {} }),
 };
-const connectExtensionFixture: HeadfulExtensionDefinition = {
+const connectModFixture: HeadfulModDefinition = {
+  nativeTrusted: true,
+  hostPermissions: ["salesforce:read", "local:remote-transport"],
   manifest: {
     schemaVersion: 1,
+    execution: "native",
     apiVersion: 1,
-    id: "connect-desktop",
+    id: "headful.connect-desktop",
     name: "Fixture remote connection",
     description: "Trusted remote fixture.",
-    packageName: "@headfulcloud/connect-desktop",
     version: "1.0.0",
     license: "MIT",
     source: "bundled",
@@ -237,12 +241,12 @@ const connectExtensionFixture: HeadfulExtensionDefinition = {
     contributions: {
       features: [
         {
-          id: "connect-desktop/remote-access",
+          id: "headful.connect-desktop/remote-access",
           name: "Remote access",
           description: "Fixture remote gate.",
           defaultEnabled: true,
           dependencies: ["org-management"],
-          route: "extensions",
+          route: "mods",
         },
       ],
     },
@@ -250,7 +254,7 @@ const connectExtensionFixture: HeadfulExtensionDefinition = {
   activate: async () => ({ dispose() {} }),
 };
 function setup() {
-  const folder = mkdtempSync(join(tmpdir(), "headful-domain-"));
+  const folder = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "headful-domain-"));
   const store = new LocalStore(folder);
   const orgId = "fictional_org_0001",
     salesforceOrgId = "00D000000000001";
@@ -282,7 +286,7 @@ function setup() {
     homeDir: folder,
     store,
     cli,
-    extensions: [mcpExtensionFixture, connectExtensionFixture],
+    mods: [mcpModFixture, connectModFixture],
   });
   const agent = {
     kind: "mcp" as const,
@@ -301,7 +305,7 @@ function setup() {
     agent,
     async close() {
       await runtime.close();
-      rmSync(folder, { recursive: true, force: true });
+      NodeFS.rmSync(folder, { recursive: true, force: true });
     },
   };
 }
@@ -740,7 +744,7 @@ describe("Connect authority shares the local org policy", () => {
     const c = setup();
     try {
       const remote: HeadfulAuthority = { ...c.agent, source: "connect" };
-      await c.runtime.dispatch("extensions.disable", { id: "mcp-apps" }, desktop);
+      await c.runtime.dispatch("mods.disable", { id: "headful.mcp-apps" }, desktop);
       expect((await c.runtime.dispatch("listOrgs", {}, remote)).orgs).toEqual([]);
       await expect(
         c.runtime.dispatch("listPermissionSets", { orgId: c.orgId }, remote),
@@ -768,9 +772,9 @@ describe("Connect authority shares the local org policy", () => {
       await expect(
         c.runtime.dispatch("listPermissionSets", { orgId: c.orgId }, remote),
       ).rejects.toMatchObject({ code: "org_missing" });
-      await c.runtime.dispatch("extensions.disable", { id: "connect-desktop" }, desktop);
+      await c.runtime.dispatch("mods.disable", { id: "headful.connect-desktop" }, desktop);
       await expect(c.runtime.dispatch("listOrgs", {}, remote)).rejects.toMatchObject({
-        code: "extension_disabled",
+        code: "mod_disabled",
       });
       expect((await c.runtime.dispatch("orgs.list", {}, desktop)).orgs).toHaveLength(1);
     } finally {

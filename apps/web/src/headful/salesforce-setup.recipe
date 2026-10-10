@@ -1,0 +1,11 @@
+await app.reset();
+await app.mock({"fixture":"ready"});
+await app.flow({"id":"salesforce-setup"});
+await app.assert({"path":"step","equals":"welcome"});
+await app.screenshot();
+await app.click({"testId":"setup-start"});
+await app.assert({"path":"step","equals":"cli"});
+await app.click({"testId":"setup-choose-orgs"});
+await app.assert({"path":"step","equals":"orgs"});
+await app.assert({"path":"alerts","equals":0});
+await app.screenshot();

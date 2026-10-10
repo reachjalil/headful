@@ -49,13 +49,19 @@
     "release:smoke": "node scripts/release-smoke.ts",
     "clean": "rm -rf node_modules apps/*/node_modules packages/*/node_modules apps/*/dist apps/*/dist-electron packages/*/dist .vite-plus apps/*/.vite-plus packages/*/.vite-plus",
     "sync:repos": "node scripts/sync-reference-repos.ts",
+    "headful:experience": "node scripts/headful-experience.mjs",
+    "headful:exposure": "node scripts/headful-exposure-check.mjs",
+    "headful:admin:journey": "node scripts/headful-admin-journey.mjs",
+    "headful:setup:journey": "node scripts/headful-setup-journey.mjs",
+    "headful:experience:test": "vp test run apps/web/src/headful/OrgSwitcher.test.tsx apps/web/src/headful/admin-workspace/AdminWorkspace.test.tsx apps/web/src/headful/ModControls.test.tsx apps/server/src/headful/OrgInsights.test.ts apps/web/src/headful/org-settings/OrgSettings.test.tsx apps/desktop/src/headful/experiences.test.ts apps/desktop/src/headful/ControlProtocol.test.ts apps/web/src/headful/lead-review/LeadReview.test.tsx packages/contracts/src/headful-cli-policy.test.ts apps/web/src/headful/HeadfulShell.test.tsx apps/web/src/headful/SalesforceSetup.test.tsx apps/web/src/headful/setup-fixtures.test.ts apps/server/src/headful/SalesforceCli.test.ts apps/server/src/headful/OrgService.test.ts apps/server/src/headful/SetupJourney.test.ts",
     "headful:dev": "node scripts/headful.ts dev",
     "headful:check": "node scripts/headful.ts check",
     "headful:test": "node scripts/headful.ts test",
     "headful:package": "node scripts/headful.ts package",
     "headful:upstream": "node scripts/headful-upstream.mjs",
     "headful:setup": "node scripts/headful.ts setup",
-    "headful:extensions": "node scripts/headful-extensions.mjs"
+    "headful:mods": "node scripts/headful-mods.mjs",
+    "headful:mods:journey": "node scripts/headful-mod-journey.mjs"
   },
   "devDependencies": {
     "@effect/tsgo": "catalog:",

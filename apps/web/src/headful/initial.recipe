@@ -1,0 +1,4 @@
+await app.reset();
+await app.assert({"path":"empty","equals":true});
+await app.assert({"path":"controls","equals":0});
+await app.screenshot();

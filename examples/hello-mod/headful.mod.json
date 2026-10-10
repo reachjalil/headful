@@ -1,0 +1,109 @@
+{
+  "schemaVersion": 1,
+  "apiVersion": 1,
+  "hostApi": "^1.0.0",
+  "id": "org.example.hello",
+  "name": "Hello local mods",
+  "description": "An account-free command, typed API, view and host-event counter.",
+  "version": "1.0.0",
+  "license": "MIT",
+  "source": "local",
+  "execution": "community",
+  "platforms": ["mac-arm64", "mac-x64"],
+  "entryPoints": {
+    "server": "./dist/index.js",
+    "renderer": "./dist/index.js"
+  },
+  "defaultEnabled": false,
+  "permissions": ["local:storage", "host:events"],
+  "activation": ["command", "view", "api", "event"],
+  "eventSubscriptions": [
+    {
+      "type": "default-org-changed",
+      "schemaVersion": 1
+    }
+  ],
+  "apis": [
+    {
+      "id": "org.example.hello/greet",
+      "input": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 80
+          }
+        },
+        "required": ["name"]
+      },
+      "output": {
+        "type": "string",
+        "maxLength": 100
+      }
+    }
+  ],
+  "contributions": {
+    "events": ["default-org-changed"],
+    "commands": [
+      {
+        "id": "org.example.hello/hello",
+        "name": "Say hello",
+        "description": "Increment this mod's local invocation count.",
+        "parameters": [],
+        "inputSchema": {
+          "type": "object",
+          "properties": {}
+        },
+        "outputSchema": {
+          "type": "object",
+          "properties": {
+            "message": {
+              "type": "string"
+            },
+            "values": {
+              "type": "object",
+              "properties": {
+                "count": {
+                  "type": "number"
+                }
+              }
+            }
+          },
+          "required": ["message", "values"]
+        }
+      }
+    ],
+    "surfaces": [
+      {
+        "id": "overview",
+        "name": "Local counter",
+        "description": "Inspect local state without Salesforce credentials."
+      }
+    ],
+    "navigation": [
+      {
+        "id": "org.example.hello/counter",
+        "name": "Local counter",
+        "surfaceId": "overview",
+        "icon": "activity",
+        "order": 100,
+        "requiresOrg": false
+      }
+    ],
+    "actions": [
+      {
+        "id": "org.example.hello/hello",
+        "name": "Say hello",
+        "commandId": "org.example.hello/hello",
+        "icon": "star",
+        "placement": "primary",
+        "order": 10,
+        "workspaceIds": ["org.example.hello/counter"],
+        "requiresOrg": false
+      }
+    ]
+  },
+  "distribution": {
+    "author": "Headful community example"
+  }
+}

@@ -7,7 +7,7 @@
   "files": [
     "dist",
     "src",
-    "headful.extension.json",
+    "headful.mod.json",
     "LICENSE",
     "README.md",
     "THIRD_PARTY_NOTICES.md"
@@ -21,7 +21,7 @@
       "import": "./dist/index.js",
       "default": "./dist/index.js"
     },
-    "./manifest": "./headful.extension.json",
+    "./manifest": "./headful.mod.json",
     "./package.json": "./package.json",
     "./web": "./src/web/index.tsx"
   },
@@ -30,7 +30,20 @@
     "typecheck": "tsc --noEmit",
     "test": "vp test run --config ../../vite.config.ts --dir ."
   },
-  "dependencies": {},
+  "dependencies": {
+    "@codemirror/autocomplete": "6.20.3",
+    "@codemirror/lang-markdown": "6.5.2",
+    "@codemirror/lang-sql": "6.10.0",
+    "@codemirror/language": "6.13.1",
+    "@codemirror/state": "6.7.6",
+    "@codemirror/view": "6.43.14",
+    "codemirror": "6.0.2",
+    "katex": "0.16.47",
+    "react-markdown": "^10.1.0",
+    "rehype-katex": "7.0.1",
+    "remark-gfm": "^4.0.1",
+    "remark-math": "6.0.0"
+  },
   "devDependencies": {
     "@t3tools/contracts": "workspace:*",
     "@types/node": "catalog:",

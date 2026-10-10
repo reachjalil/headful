@@ -1,10 +1,23 @@
 import { z } from "zod";
+export {
+  salesforceTaskStepSchema,
+  salesforceTaskStepsSchema,
+  salesforceTaskActions,
+  salesforceTaskOperations,
+  type SalesforceTaskStep,
+} from "./headful-salesforce-tasks.ts";
+export {
+  HEADFUL_MINIMUM_SALESFORCE_CLI_VERSION,
+  supportsSalesforceCli,
+} from "./headful-cli-policy.ts";
 import { headfulUtilityInputSchemas, headfulUtilityResultSchemas } from "./headful-utilities.ts";
+import { orgInsightInputSchemas, orgInsightResultSchemas } from "./headful-org-insights.ts";
+export { HEADFUL_SALESFORCE_API_VERSION } from "./headful-org-insights.ts";
 import {
-  extensionFeatureIdSchema,
-  headfulExtensionInputSchemas,
-  headfulExtensionResultSchemas,
-} from "./headful-extensions.ts";
+  modFeatureIdSchema,
+  headfulModInputSchemas,
+  headfulModResultSchemas,
+} from "./headful-mods.ts";
 import { identifier, sfId } from "./headful-workspace/contract-schema.ts";
 import {
   userDraftSchema,
@@ -29,8 +42,9 @@ const empty = z.strictObject({}),
   workflow = z.strictObject({ workflowId: identifier });
 const search = z.string().trim().max(100).default("");
 export const headfulInputSchemas = {
+  ...orgInsightInputSchemas,
   ...headfulUtilityInputSchemas,
-  ...headfulExtensionInputSchemas,
+  ...headfulModInputSchemas,
   status: empty,
   "cli.detect": empty,
   "cli.configure": z.strictObject({ path: z.string().max(2000).nullable() }),
@@ -71,7 +85,7 @@ export const headfulInputSchemas = {
   "orgs.logout": z.strictObject({ orgId: identifier, confirmLogout: z.literal(true) }),
   "orgs.sandboxes": org,
   "features.list": empty,
-  "features.set": z.strictObject({ id: extensionFeatureIdSchema, enabled: z.boolean() }),
+  "features.set": z.strictObject({ id: modFeatureIdSchema, enabled: z.boolean() }),
   "onboarding.complete": z.strictObject({
     mode: z.enum(["minimal", "power-user"]).default("minimal"),
   }),
@@ -159,6 +173,7 @@ import {
   preparedPermissionSchema,
 } from "./headful-workspace/ui-schema.ts";
 const managedOrgSchema = orgSchema.extend({
+  environment: z.enum(["production", "sandbox", "scratch", "developer", "unknown"]).optional(),
   username: z.string(),
   principalId: sfId,
   alias: z.string(),
@@ -175,24 +190,26 @@ const managedOrgsSchema = z.strictObject({
 const featuresSchema = z.strictObject({
   features: z.array(
     z.strictObject({
-      id: extensionFeatureIdSchema,
+      id: modFeatureIdSchema,
       name: z.string(),
       description: z.string(),
       availability: z.enum(["available", "experimental"]),
       defaultEnabled: z.boolean(),
-      dependencies: z.array(extensionFeatureIdSchema),
+      dependencies: z.array(modFeatureIdSchema),
       configuration: z.array(z.string()),
       permissions: z.array(z.string()),
       route: z.string(),
       lifecycle: z.string(),
       enabled: z.boolean(),
-      extensionId: z.string().optional(),
+      configuredEnabled: z.boolean(),
+      modId: z.string().optional(),
     }),
   ),
   mode: z.enum(["minimal", "power-user"]),
   onboardingComplete: z.boolean(),
 });
 const cliDetectionSchema = z.strictObject({
+  minimumVersion: z.string(),
   state: z.enum(["missing", "ready", "unsupported", "multiple"]),
   installations: z.array(
     z.strictObject({
@@ -208,8 +225,9 @@ const cliDetectionSchema = z.strictObject({
   legacyDetected: z.boolean(),
 });
 export const headfulResultSchemas = {
+  ...orgInsightResultSchemas,
   ...headfulUtilityResultSchemas,
-  ...headfulExtensionResultSchemas,
+  ...headfulModResultSchemas,
   status: managedOrgsSchema.extend({
     ...featuresSchema.shape,
     product: z.literal("Headful"),
@@ -231,7 +249,7 @@ export const headfulResultSchemas = {
           isSandbox: z.boolean().optional(),
           connectedStatus: z.string().optional(),
           expirationDate: z.string().optional(),
-          environment: z.enum(["production", "sandbox", "scratch", "unknown"]),
+          environment: z.enum(["production", "sandbox", "scratch", "developer", "unknown"]),
         }),
       )
       .max(100),

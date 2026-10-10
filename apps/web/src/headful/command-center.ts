@@ -1,16 +1,16 @@
 import type { HeadfulResult } from "@t3tools/contracts/headful";
-import type { HeadfulExtensionDescriptor } from "@t3tools/contracts/headful-extensions";
+import type { HeadfulModDescriptor } from "@t3tools/contracts/headful-mods";
 import type { WorkspaceLocation } from "./workspace-view";
 
 export type CommandDestination =
   | {
       kind: "page";
-      page: "orgs" | "workspace" | "integrations" | "activity" | "extensions" | "settings";
+      page: "orgs" | "workspace" | "integrations" | "activity" | "mods" | "settings";
     }
   | { kind: "org"; orgId: string }
   | { kind: "workspace"; location: WorkspaceLocation }
   | { kind: "utility"; componentId: string }
-  | { kind: "extension"; extensionId: string };
+  | { kind: "mod"; modId: string };
 
 export interface SearchEntry {
   id: string;
@@ -55,7 +55,7 @@ export interface NotificationsInput {
     "id" | "label" | "status" | "connectionVersion"
   >[];
   cli: Pick<HeadfulResult<"cli.detect">, "state" | "selected"> | null;
-  extensions: readonly HeadfulExtensionDescriptor[];
+  mods: readonly HeadfulModDescriptor[];
   workflows: readonly HeadfulResult<"listWorkflows">["workflows"][number][];
   activity: readonly HeadfulResult<"activity.list">["activity"][number][];
   workspaceEnabled: boolean;
@@ -158,33 +158,33 @@ export function buildNotifications(input: NotificationsInput): NotificationEntry
       destination: { kind: "page", page: "orgs" },
     });
   }
-  for (const extension of input.extensions) {
-    if (!extension.enabled) continue;
-    const { id, name } = extension.manifest;
-    if (["error", "blocked", "incompatible"].includes(extension.status)) {
+  for (const mod of input.mods) {
+    if (!mod.enabled) continue;
+    const { id, name } = mod.manifest;
+    if (["failed", "blocked", "incompatible"].includes(mod.status)) {
       notifications.push({
-        id: `extension:${id}:${extension.status}`,
+        id: `mod:${id}:${mod.status}`,
         title: `${name} needs attention`,
         description:
-          extension.status === "incompatible"
-            ? "This extension is incompatible with the current runtime. Open Extensions to inspect it."
-            : "This extension could not activate. Open Extensions to inspect its status.",
+          mod.status === "incompatible"
+            ? "This mod is incompatible with the current runtime. Open Mods to inspect it."
+            : "This mod could not activate. Open Mods to inspect its status.",
         level: "warning",
-        destination: { kind: "extension", extensionId: id },
+        destination: { kind: "mod", modId: id },
       });
     }
-    if (extension.status !== "active") continue;
-    for (const runtime of extension.runtimeStatuses) {
+    if (mod.status !== "active") continue;
+    for (const runtime of mod.runtimeStatuses) {
       if (runtime.state !== "error" && runtime.state !== "offline") continue;
       notifications.push({
-        id: `extension:${id}:${runtime.id}:${runtime.state}`,
+        id: `mod:${id}:${runtime.id}:${runtime.state}`,
         title: `${name}: ${runtime.label}`,
         description:
           runtime.state === "offline"
-            ? "This extension service is offline. Open Extensions to inspect its status."
-            : "This extension service needs attention. Open Extensions to inspect its status.",
+            ? "This mod service is offline. Open Mods to inspect its status."
+            : "This mod service needs attention. Open Mods to inspect its status.",
         level: "warning",
-        destination: { kind: "extension", extensionId: id },
+        destination: { kind: "mod", modId: id },
       });
     }
   }

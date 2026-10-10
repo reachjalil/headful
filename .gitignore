@@ -52,3 +52,7 @@ node_modules/
 artifacts/headful/
 
 assets/headful/mcp-app/
+
+artifacts/mods/
+examples/*/dist/
+packages/mod-sdk/dist/

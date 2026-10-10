@@ -1,5 +1,6 @@
 # Connect Headful to your agent
 
+The compiled first-party MCP Apps mod retains these transport, grant and harness capabilities. The current minimal desktop exposes mod lifecycle/status in Settings → Local mods; the prior Integrations workspace is retained for deliberate future composition. The operating guidance below does not re-enable that shell.
 Start Headful on your Mac and connect or import a Salesforce org. Enable agent access on the org, then open **Integrations**. Create a named local grant, select its orgs, and choose read access or supported administration proposals. A grant never authorizes Salesforce writes: those require an exact human review in the Headful desktop.
 
 Select your client and grant, preview the configuration, then install it. Headful changes its own `headful` entry, preserves unrelated settings, makes an owner-only backup, and writes atomically. If an existing entry was changed outside Headful, installation or removal stops so your edits remain intact. Restart or refresh the client's MCP connection after configuration changes. Paths with spaces are supported.
@@ -22,13 +23,13 @@ claude mcp add --scope user --transport stdio headful -- "$HOME/.headful/bin/hea
 
 Do not run these commands on top of a Headful-managed entry without first removing that entry in Integrations. Client CLI installation is optional; no agent client is required for managing orgs.
 
-When the optional MCP Apps Extension is included, its plugin ZIP bundles focused skills for administration, leads, permission sets and user creation. Configure **Plugin** in Integrations first, then extract the ZIP and add that extraction root as a local marketplace in a supported Codex client:
+When the optional MCP Apps Mod is included, its plugin ZIP bundles focused skills for administration, leads, permission sets and user creation. Configure **Plugin** in Integrations first, then extract the ZIP and add that extraction root as a local marketplace in a supported Codex client:
 
 ```sh
 codex plugin marketplace add /absolute/path/to/extracted-headful-plugin
 ```
 
-Install **Headful Local**, refresh the connection and start a new chat. The plugin lives in the compiled Extension; its private source is not in this public repository. For a supported local Claude Code client, use `claude --plugin-dir /absolute/path/to/extracted-headful-plugin`. Client and organization policies control installation availability.
+Install **Headful Local**, refresh the connection and start a new chat. The plugin lives in the compiled Mod; its private source is not in this public repository. For a supported local Claude Code client, use `claude --plugin-dir /absolute/path/to/extracted-headful-plugin`. Client and organization policies control installation availability.
 
 **Hosted ChatGPT.** A hosted connection cannot run a Mac stdio launcher or reach your loopback address directly. OpenAI's [Secure MCP Tunnel](https://developers.openai.com/api/docs/guides/secure-mcp-tunnels) provides an operator-configured private testing path. It requires an OpenAI tunnel, local runtime API credentials, the matching Platform/ChatGPT workspace permissions, and a running Headful app. Configure the tunnel's stdio backend to `~/.headful/bin/headful-mcp-plugin`, using a dedicated minimal grant. API keys and tunnel settings stay outside the plugin and repository. In ChatGPT Plugins, create a custom MCP server through the **Tunnel** connection option available in your account. A tunnel is a private testing connection; public store distribution has a separate review process.
 

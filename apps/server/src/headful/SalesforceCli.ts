@@ -1,15 +1,21 @@
+/* oxlint-disable t3code/no-global-process-runtime -- Native CLI adapter intentionally owns Mac process architecture outside Effect. */
 // @effect-diagnostics-next-line nodeBuiltinImport:off - native process/SQLite adapter owned by the scoped Headful runtime.
-import { spawn } from "node:child_process";
+import * as NodeChildProcess from "node:child_process";
 // @effect-diagnostics-next-line nodeBuiltinImport:off - native process/SQLite adapter owned by the scoped Headful runtime.
-import { access, realpath } from "node:fs/promises";
+import * as NodeFSP from "node:fs/promises";
 // @effect-diagnostics-next-line nodeBuiltinImport:off - native process/SQLite adapter owned by the scoped Headful runtime.
-import { constants } from "node:fs";
-import { homedir } from "node:os";
+import * as NodeFS from "node:fs";
+import * as NodeOS from "node:os";
 // @effect-diagnostics-next-line nodeBuiltinImport:off - native process/SQLite adapter owned by the scoped Headful runtime.
-import { delimiter, isAbsolute, join } from "node:path";
+import * as NodePath from "node:path";
 import * as Context from "effect/Context";
 import * as Layer from "effect/Layer";
 import { z } from "zod";
+import {
+  HEADFUL_MINIMUM_SALESFORCE_CLI_VERSION,
+  HEADFUL_SALESFORCE_API_VERSION,
+  supportsSalesforceCli,
+} from "@t3tools/contracts/headful";
 import { HttpError } from "./domain/types.ts";
 import { readOnlySoql } from "./utilities/soql.ts";
 
@@ -20,6 +26,7 @@ export interface CliInstallation {
   source: "configured" | "path" | "common";
 }
 export interface CliDetection {
+  minimumVersion: string;
   state: "missing" | "ready" | "unsupported" | "multiple";
   installations: CliInstallation[];
   selected: string | null;
@@ -38,13 +45,23 @@ const sessionSchema = z.object({
   id: z.string().regex(/^[a-zA-Z0-9]{15}(?:[a-zA-Z0-9]{3})?$/),
   username: z.string().min(1).max(255),
   instanceUrl: z.url(),
-  accessToken: z.string().min(10).max(32000),
   userId: z.string().nullable().optional(),
+});
+const accessTokenSchema = z.object({
+  accessToken: z
+    .string()
+    .min(10)
+    .max(32000)
+    .refine(
+      (value) => !/\s|\[REDACTED\]|\[HIDDEN\]/i.test(value),
+      "Salesforce CLI did not return a usable access token.",
+    ),
 });
 const safePrincipal = z
   .string()
   .min(1)
   .max(255)
+  // oxlint-disable-next-line no-control-regex -- CLI targets must reject control characters.
   .regex(/^[^\s\x00-\x1f]+$/);
 export function salesforceOrigin(value: string) {
   const u = new URL(value);
@@ -67,7 +84,11 @@ export function salesforceOrigin(value: string) {
 /** Only allowlisted methods call this adapter. Raw CLI payloads remain in the server. */
 export class CliAdapter {
   private executable: string | null = null;
-  private readonly children = new Set<ReturnType<typeof spawn>>();
+  private discoveredKinds = new Map<
+    string,
+    "production" | "sandbox" | "scratch" | "developer" | "unknown"
+  >();
+  private readonly children = new Set<ReturnType<typeof NodeChildProcess.spawn>>();
   private readonly credentialFragments = new Set<string>();
   private safeUtilityResult(raw: unknown): unknown {
     let serialized = JSON.stringify(raw);
@@ -75,7 +96,7 @@ export class CliAdapter {
       serialized = serialized.replaceAll(JSON.stringify(credential).slice(1, -1), "[REDACTED]");
     return JSON.parse(serialized);
   }
-  private terminate(child: ReturnType<typeof spawn>) {
+  private terminate(child: ReturnType<typeof NodeChildProcess.spawn>) {
     child.kill("SIGTERM");
     // @effect-diagnostics-next-line globalTimers:off - SIGKILL is limited to this adapter's exact spawned child after graceful termination.
     const timer = setTimeout(() => {
@@ -97,7 +118,7 @@ export class CliAdapter {
     if (signal?.aborted)
       throw new HttpError(409, "cli_cancelled", "This Salesforce read was cancelled.");
     return new Promise((resolve, reject) => {
-      const child = spawn(executable, args, {
+      const child = NodeChildProcess.spawn(executable, args, {
         shell: false,
         windowsHide: true,
         stdio: ["ignore", "pipe", "pipe"],
@@ -109,7 +130,7 @@ export class CliAdapter {
             "/usr/local/bin",
             "/usr/bin",
             "/bin",
-          ].join(delimiter),
+          ].join(NodePath.delimiter),
           SF_DISABLE_TELEMETRY: "true",
           SFDX_DISABLE_TELEMETRY: "true",
           SF_AUTOUPDATE_DISABLE: "true",
@@ -211,21 +232,21 @@ export class CliAdapter {
   async detect(): Promise<CliDetection> {
     const options: [string, CliInstallation["source"]][] = [];
     if (this.configuredPath) options.push([this.configuredPath, "configured"]);
-    for (const folder of (process.env.PATH ?? "").split(delimiter).filter(Boolean))
-      options.push([join(folder, "sf"), "path"]);
+    for (const folder of (process.env.PATH ?? "").split(NodePath.delimiter).filter(Boolean))
+      options.push([NodePath.join(folder, "sf"), "path"]);
     for (const path of [
       "/opt/homebrew/bin/sf",
       "/usr/local/bin/sf",
-      join(homedir(), ".local/bin/sf"),
-      join(homedir(), ".sf/bin/sf"),
+      NodePath.join(NodeOS.homedir(), ".local/bin/sf"),
+      NodePath.join(NodeOS.homedir(), ".sf/bin/sf"),
     ])
       options.push([path, "common"]);
     const seen = new Set<string>(),
       installations: CliInstallation[] = [];
     for (const [path, source] of options) {
       try {
-        await access(path, constants.X_OK);
-        const actual = await realpath(path);
+        await NodeFSP.access(path, NodeFS.constants.X_OK);
+        const actual = await NodeFSP.realpath(path);
         if (seen.has(actual)) continue;
         seen.add(actual);
         const raw = await this.runAt(path, ["version", "--json"], 10000);
@@ -239,16 +260,10 @@ export class CliAdapter {
                     "",
                 )
               : "";
-        const match = version.match(/(?:@salesforce\/cli\/|sf\/)?(\d+)\.(\d+)\.(\d+)/);
         installations.push({
           path,
           version: version.slice(0, 180),
-          supported: Boolean(
-            match &&
-            Number(match[1]) >= 2 &&
-            !version.includes("sfdx-cli") &&
-            /^(?:@salesforce\/cli\/|sf\/|\d+\.)/.test(version),
-          ),
+          supported: supportsSalesforceCli(version),
           source,
         });
       } catch {
@@ -263,13 +278,14 @@ export class CliAdapter {
     let legacyDetected = false;
     for (const path of ["/opt/homebrew/bin/sfdx", "/usr/local/bin/sfdx"])
       try {
-        await access(path, constants.X_OK);
+        await NodeFSP.access(path, NodeFS.constants.X_OK);
         legacyDetected = true;
       } catch {}
     const architecture = process.arch === "arm64" ? "Apple Silicon" : "Intel";
     return {
+      minimumVersion: HEADFUL_MINIMUM_SALESFORCE_CLI_VERSION,
       state:
-        installations.filter((i) => i.supported).length > 1
+        this.executable && installations.filter((i) => i.supported).length > 1
           ? "multiple"
           : this.executable
             ? "ready"
@@ -284,7 +300,7 @@ export class CliAdapter {
     };
   }
   async configure(path: string | null) {
-    if (path !== null && (!isAbsolute(path) || path.includes("\0")))
+    if (path !== null && (!NodePath.isAbsolute(path) || path.includes("\0")))
       throw new HttpError(400, "cli_path", "Choose an absolute Salesforce CLI executable path.");
     this.configuredPath = path;
     return this.detect();
@@ -301,8 +317,13 @@ export class CliAdapter {
       );
     return this.runAt(this.executable, args, timeout, signal);
   }
-  async discover() {
-    const raw = await this.run(["org", "list", "--json", "--skip-connection-status"]);
+  async discover(includeExpired = false) {
+    const raw = await this.run([
+      "org",
+      "list",
+      ...(includeExpired ? ["--all", "--skip-connection-status"] : []),
+      "--json",
+    ]);
     const schema = z.object({
       nonScratchOrgs: z
         .array(
@@ -313,6 +334,7 @@ export class CliAdapter {
             instanceUrl: z.string().optional(),
             isSandbox: z.boolean().optional(),
             connectedStatus: z.string().optional(),
+            organizationType: z.string().optional(),
           }),
         )
         .default([]),
@@ -329,31 +351,60 @@ export class CliAdapter {
         .default([]),
     });
     const result = schema.parse(raw);
-    return {
+    const discovery = {
       connections: [
         ...result.nonScratchOrgs.map((o) => ({
           ...o,
           environment:
-            o.isSandbox === undefined ? "unknown" : o.isSandbox ? "sandbox" : "production",
+            o.organizationType === "Developer Edition"
+              ? "developer"
+              : o.isSandbox === undefined
+                ? "unknown"
+                : o.isSandbox
+                  ? "sandbox"
+                  : "production",
         })),
         ...result.scratchOrgs.map((o) => ({ ...o, environment: "scratch" })),
       ].slice(0, 100),
       bounded: true,
     };
+    this.discoveredKinds.clear();
+    for (const connection of discovery.connections) {
+      if (connection.orgId)
+        this.discoveredKinds.set(
+          `${connection.orgId.slice(0, 15)}:${connection.username}`,
+          connection.environment as "production" | "sandbox" | "scratch" | "developer" | "unknown",
+        );
+    }
+    return discovery;
+  }
+  discoveredEnvironment(orgId: string, username: string) {
+    return this.discoveredKinds.get(`${orgId.slice(0, 15)}:${username}`);
   }
   async session(target: string, signal?: AbortSignal): Promise<CliSession> {
     safePrincipal.parse(target);
     const raw = sessionSchema.parse(
       await this.run(["org", "display", "--target-org", target, "--json"], 30000, signal),
     );
-    this.credentialFragments.add(raw.accessToken);
+    safePrincipal.parse(raw.username);
+    const instanceOrigin = salesforceOrigin(raw.instanceUrl);
+    // Standard display output redacts secrets on current CLI versions. Retrieve only
+    // the access token, pinned to the resolved username, never an SFDX auth URL/refresh token.
+    const { accessToken } = accessTokenSchema.parse(
+      await this.run(
+        ["org", "auth", "show-access-token", "--target-org", raw.username, "--json"],
+        30000,
+        signal,
+      ),
+    );
+    this.credentialFragments.add(accessToken);
     if (this.credentialFragments.size > 100)
       this.credentialFragments.delete(this.credentialFragments.values().next().value!);
     return {
       orgId: raw.id,
       username: raw.username,
-      instanceOrigin: salesforceOrigin(raw.instanceUrl),
-      accessToken: raw.accessToken,
+      instanceOrigin,
+      accessToken,
       userId: raw.userId ?? null,
     };
   }
@@ -483,6 +534,46 @@ export class CliAdapter {
   async utilityLimits(target: string, signal?: AbortSignal) {
     safePrincipal.parse(target);
     return this.run(["org", "list", "limits", "--target-org", target, "--json"], 30000, signal);
+  }
+  async metadataTypes(target: string) {
+    safePrincipal.parse(target);
+    return this.run([
+      "org",
+      "list",
+      "metadata-types",
+      "--target-org",
+      target,
+      "--api-version",
+      HEADFUL_SALESFORCE_API_VERSION,
+      "--json",
+    ]);
+  }
+  async metadataComponents(target: string, type: string, folder?: string) {
+    safePrincipal.parse(target);
+    z.string()
+      .regex(/^[A-Za-z][A-Za-z0-9_]{0,79}$/)
+      .parse(type);
+    const args = [
+      "org",
+      "list",
+      "metadata",
+      "--metadata-type",
+      type,
+      "--target-org",
+      target,
+      "--api-version",
+      HEADFUL_SALESFORCE_API_VERSION,
+      "--json",
+    ];
+    if (folder) {
+      z.string()
+        .min(1)
+        .max(200)
+        .regex(/^[A-Za-z0-9_$][A-Za-z0-9_$ /-]{0,199}$/)
+        .parse(folder);
+      args.push("--folder", folder);
+    }
+    return this.run(args);
   }
   async utilityLogs(target: string, signal?: AbortSignal) {
     safePrincipal.parse(target);

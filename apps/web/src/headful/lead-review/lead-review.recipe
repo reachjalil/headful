@@ -1,0 +1,15 @@
+await app.reset();
+await app.mock({"fixture":"ready"});
+await app.flow({"id":"lead-review"});
+await app.assert({"path":"step","equals":"list"});
+await app.assert({"path":"alerts","equals":0});
+await app.screenshot();
+await app.click({"testId":"lead-row-1"});
+await app.assert({"path":"step","equals":"detail"});
+await app.screenshot();
+await app.click({"testId":"lead-back"});
+await app.assert({"path":"step","equals":"list"});
+await app.mock({"fixture":"expired"});
+await app.flow({"id":"lead-review"});
+await app.assert({"path":"alerts","equals":1});
+await app.screenshot();

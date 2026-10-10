@@ -34,6 +34,7 @@ export function useUtilityTask() {
 export function UtilityPanel({
   title,
   description,
+  className = "",
   actions,
   children,
   busy,
@@ -41,16 +42,25 @@ export function UtilityPanel({
 }: {
   title: string;
   description: string;
+  className?: string;
   actions?: ReactNode;
   children: ReactNode;
   busy?: boolean;
   error?: string;
 }) {
   return (
-    <section className="hf-utility-panel" aria-busy={busy || false}>
+    <section className={`hf-utility-panel ${className}`} aria-busy={busy || false}>
       <div className="hf-utility-heading">
         <div>
-          <h1>{title}</h1>
+          <nav className="hf-utility-breadcrumb" aria-label="Workspace breadcrumb">
+            <ol>
+              <li>Workspace</li>
+              <li aria-hidden="true">/</li>
+              <li aria-current="page">
+                <h1>{title}</h1>
+              </li>
+            </ol>
+          </nav>
           <p>{description}</p>
         </div>
         {actions && <div className="hf-actions">{actions}</div>}

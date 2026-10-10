@@ -6,13 +6,23 @@ Use scoped Headful commands and focused tests. Core onboarding needs Salesforce 
 
 The user explicitly authorizes parallel agents, browser/app inspection needed for focused verification, Mac packaging, committing/pushing this fork and updating the separately maintained Headful website. Do not modify HelloMCP or message unrelated tasks.
 
+## Current experience rebuild
+
+Rebuild Headful deliberately from the user's perspective, one flow at a time. The first composed desktop experience is Welcome → Salesforce CLI readiness → Salesforce org connections. After onboarding, mount the compact org workspace with Objects & fields, Query data, Inspect record, Org health and Setup shortcuts, plus the CLI indicator/Setup menu and settings cog. A compact dropdown in the top bar switches exact org logins across the workspace and Settings; keep per-org drafts and omit a persistent workspace org list. The workspace uses a compact editor frame with a tool strip, breadcrumbs, independently scrolling query/results panes and a collapsible fields/saved/history reference panel. Both Setup entry points reuse the same connection component. Do not restore the superseded chat, navigation, notifications or legacy routes. The empty canvas remains an explicit development fixture. Native Mac window controls remain usable.
+
+Keep existing service capabilities, experience components, shared client architecture, credentials and user data available to support the redesign. The previous desktop shell is superseded; do not reintroduce it or offer a legacy-shell switch. Introduce visible experiences only as the user designs them.
+
+Each new flow must have an isolated development entry point with explicit starting state and reset/replay, so it can be designed and verified without navigating other flows. Use clearly labeled fixtures for isolated design and focused end-to-end verification for the actual service boundary. Fixture entry points must stay development-only and cannot bypass authentication, org authority or consequential-write review. Keep the normal startup minimal until the user intentionally composes these experiences.
+
+Project management and design use many focused MCP Apps: an experience list, one experience brief, one flow review, and one evidence review. Share small persistent experience records; do not build a monolithic dashboard or workflow engine. Capture intent, availability, steps, decisions, notes, exact recipes and evidence for Headful experiences only. Retained functionality is not enabled UX. Keep end-to-end recipes explicit, short, revision-bound, independently runnable and under the user’s control; stop on the first failure and never retry automatically. Desktop control requires an expiring, revocable native authorization grant. Development fixtures and interaction/capture control never grant provider-write authority.
+
 ## Pre-release greenfield policy
 
 Headful is an unreleased greenfield product until the user explicitly declares its first official release. Ship one coherent current beta; do not accumulate technical debt to preserve earlier beta behavior. When the design changes, remove superseded code paths, temporary compatibility shims, dependencies and stale instructions in the same change. Update the current documentation rather than appending competing implementation or release histories.
 
 Keep only the current requested application and distribution artifact. Earlier beta ZIPs are not rollback artifacts and must be removed once superseded. Remove task-owned disposable builds, caches, scratch files and obsolete QA material after verification and preview use end. Keep focused evidence of the current deliverable without creating a permanent archive for each iteration.
 
-This policy does not authorize deleting unique user data, credentials, source, legal notices, the preserved T3 fork history, apps/mobile or shared client architecture. Respect running processes and other tasks' work. Preserve required local compiled extension outputs. Do not add migrations or compatibility layers for disposable beta fixtures; protect real user state when a change actually requires it. Revisit version support and rollback retention only when an official release makes those commitments necessary.
+This policy does not authorize deleting unique user data, credentials, source, legal notices, the preserved T3 fork history, apps/mobile or shared client architecture. Respect running processes and other tasks' work. Preserve required local compiled mod outputs. Do not add migrations or compatibility layers for disposable beta fixtures; protect real user state when a change actually requires it. Revisit version support and rollback retention only when an official release makes those commitments necessary.
 
 The following retained upstream instructions guide architecture where applicable. Headful's product scope above takes precedence.
 

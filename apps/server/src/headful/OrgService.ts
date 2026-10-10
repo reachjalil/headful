@@ -1,8 +1,5 @@
-// Native Salesforce HTTP seam owns AbortSignal cancellation and streaming byte bounds.
-// The Effect service and all transports share this exact credential-safe adapter.
-// @effect-diagnostics globalTimers:off globalFetch:off
 import { now } from "./domain/security.ts";
-import { randomBytes } from "node:crypto";
+import * as NodeCrypto from "node:crypto";
 import { z } from "zod";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -10,6 +7,7 @@ import * as Layer from "effect/Layer";
 import * as Store from "./Store.ts";
 import * as SalesforceCli from "./SalesforceCli.ts";
 import { HttpError, type Org } from "./domain/types.ts";
+import { assertSalesforceRequest, salesforceJson } from "./SalesforceHttp.ts";
 const sfId = z.string().regex(/^[a-zA-Z0-9]{15}(?:[a-zA-Z0-9]{3})?$/);
 export const colorSchema = z.string().regex(/^#[0-9a-fA-F]{6}$/);
 export const canonicalIdentity = (id: string) => sfId.parse(id).slice(0, 15);
@@ -25,9 +23,17 @@ export function publicOrg(org: Org) {
     organizationName: org.organization_name,
   };
 }
-export function managedOrg(org: Org, isDefault: boolean, remoteEnabled = false) {
+export function managedOrg(
+  org: Org,
+  isDefault: boolean,
+  remoteEnabled = false,
+  environment?: "production" | "sandbox" | "scratch" | "developer" | "unknown",
+) {
   return {
     ...publicOrg(org),
+    environment:
+      environment ??
+      (org.is_sandbox === null ? "unknown" : org.is_sandbox ? "sandbox" : "production"),
     username: org.username,
     principalId: org.salesforce_user_id,
     alias: org.alias,
@@ -38,47 +44,21 @@ export function managedOrg(org: Org, isDefault: boolean, remoteEnabled = false) 
     connectionVersion: org.connection_version,
   };
 }
-async function boundedBody(response: Response, maximum: number) {
-  const reader = response.body?.getReader();
-  if (!reader) return "";
-  const decoder = new TextDecoder();
-  let body = "",
-    length = 0;
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    length += value.byteLength;
-    if (length > maximum) {
-      await reader.cancel();
-      throw new HttpError(
-        502,
-        "provider_bound",
-        "Salesforce response exceeded its supported size.",
-      );
-    }
-    body += decoder.decode(value, { stream: true });
-  }
-  return body + decoder.decode();
-}
 /** CLI owns auth. When its display format omits userId, confirm the token's actual subject directly with Salesforce. */
 async function verifiedSession(cli: SalesforceCli.CliAdapter, username: string) {
   const session = await cli.session(username);
   if (session.userId) return { ...session, userId: sfId.parse(session.userId) };
-  const response = await fetch(session.instanceOrigin + "/services/oauth2/userinfo", {
-    redirect: "error",
-    signal: AbortSignal.timeout(20000),
-    headers: { authorization: `Bearer ${session.accessToken}` },
-  });
-  if (!response.ok)
-    throw new HttpError(
-      401,
-      "provider_expired",
-      "Salesforce could not verify the authenticated principal. Reconnect this org.",
-    );
-  const body = await boundedBody(response, 200000);
   const identity = z
     .object({ user_id: sfId, organization_id: sfId, preferred_username: z.string().optional() })
-    .parse(JSON.parse(body));
+    .parse(
+      await salesforceJson(
+        session.instanceOrigin + "/services/oauth2/userinfo",
+        session.accessToken,
+        {},
+        false,
+        200000,
+      ),
+    );
   if (
     canonicalIdentity(identity.organization_id) !== canonicalIdentity(session.orgId) ||
     (identity.preferred_username && identity.preferred_username !== session.username)
@@ -90,15 +70,32 @@ async function verifiedSession(cli: SalesforceCli.CliAdapter, username: string) 
     );
   return { ...session, userId: identity.user_id };
 }
+const pendingReadSessions = new WeakMap<
+  SalesforceCli.CliAdapter,
+  Map<string, Promise<Awaited<ReturnType<typeof verifiedSession>>>>
+>();
+function readSession(cli: SalesforceCli.CliAdapter, username: string) {
+  let pending = pendingReadSessions.get(cli);
+  if (!pending) {
+    pending = new Map();
+    pendingReadSessions.set(cli, pending);
+  }
+  let session = pending.get(username);
+  if (!session) {
+    session = verifiedSession(cli, username).finally(() => pending.delete(username));
+    pending.set(username, session);
+  }
+  return session;
+}
 /** Credentials are re-obtained from Salesforce CLI and never persisted by Headful. */
-export async function directRequest(
+export async function verifiedOrgSession(
   cli: SalesforceCli.CliAdapter,
   org: Pick<Org, "username" | "salesforce_org_id" | "salesforce_user_id" | "instance_origin">,
-  path: string,
-  init: RequestInit = {},
-  write = false,
+  fresh = false,
 ) {
-  const session = await verifiedSession(cli, org.username);
+  const session = await (fresh
+    ? verifiedSession(cli, org.username)
+    : readSession(cli, org.username));
   if (
     canonicalIdentity(session.orgId) !== canonicalIdentity(org.salesforce_org_id) ||
     session.username !== org.username ||
@@ -111,63 +108,45 @@ export async function directRequest(
       "connection_changed",
       "Salesforce CLI now resolves to a different org or principal. Reconnect and review again.",
     );
-  if (!path.startsWith("/services/data/") || path.includes("..") || path.length > 20000)
-    throw new HttpError(400, "provider_path", "This Salesforce operation is unavailable.");
-  const controller = new AbortController(),
-    timer = setTimeout(() => controller.abort(), 20000);
-  try {
-    const response = await fetch(session.instanceOrigin + path, {
-      ...init,
-      redirect: "error",
-      signal: controller.signal,
-      headers: {
-        ...init.headers,
-        authorization: `Bearer ${session.accessToken}`,
-        "content-type": "application/json",
-      },
-    });
-    const bytes = Number(response.headers.get("content-length") ?? 0);
-    if (bytes > 4 * 1024 * 1024)
-      throw new HttpError(
-        502,
-        "provider_bound",
-        "Salesforce response exceeded the supported size.",
-      );
-    const raw = await boundedBody(response, 4 * 1024 * 1024);
-    if (!response.ok && write && (response.status >= 500 || response.status === 408))
-      throw new HttpError(
-        502,
-        "execution_unknown",
-        "Salesforce did not establish the write outcome. Reconcile this workflow; do not retry.",
-      );
-    if (!response.ok)
-      throw new HttpError(
-        response.status === 401 ? 401 : response.status === 412 ? 409 : 502,
-        response.status === 401
-          ? "provider_expired"
-          : response.status === 412
-            ? "provider_stale"
-            : "provider_rejected",
-        response.status === 401
-          ? "Salesforce authorization expired. Reconnect this org."
-          : response.status === 412
-            ? "Salesforce changed during review. Prepare a fresh proposal."
-            : "Salesforce rejected the operation. Check required permissions and provider constraints.",
-      );
-    return raw ? (JSON.parse(raw) as unknown) : null;
-  } catch (error) {
-    if (error instanceof HttpError) throw error;
+  return session;
+}
+export async function directRequest(
+  cli: SalesforceCli.CliAdapter,
+  org: Pick<Org, "username" | "salesforce_org_id" | "salesforce_user_id" | "instance_origin">,
+  path: string,
+  init: RequestInit = {},
+  write = false,
+) {
+  assertSalesforceRequest(path, init, write);
+  if (init.signal?.aborted)
     throw new HttpError(
-      502,
-      write ? "execution_unknown" : "provider_unavailable",
-      write
-        ? "The Salesforce outcome is uncertain. Reconcile it before further changes."
-        : "Salesforce is unavailable. Check the connection and try the read again.",
+      409,
+      "provider_cancelled",
+      "This Salesforce request was cancelled before dispatch.",
     );
+  const session = await verifiedOrgSession(cli, org, write);
+  return salesforceJson(session.instanceOrigin + path, session.accessToken, init, write);
+}
+
+/** One read operation pins one verified token; the callback cannot issue writes or outlive the operation. */
+export async function withVerifiedRead<T>(
+  cli: SalesforceCli.CliAdapter,
+  org: Pick<Org, "username" | "salesforce_org_id" | "salesforce_user_id" | "instance_origin">,
+  run: (read: (path: string) => Promise<unknown>) => Promise<T>,
+) {
+  const session = await verifiedOrgSession(cli, org);
+  const lifetime = new AbortController();
+  const signal = AbortSignal.any([lifetime.signal, AbortSignal.timeout(20000)]);
+  try {
+    return await run(async (path) => {
+      assertSalesforceRequest(path, {}, false);
+      return salesforceJson(session.instanceOrigin + path, session.accessToken, { signal });
+    });
   } finally {
-    clearTimeout(timer);
+    lifetime.abort();
   }
 }
+
 export class OrgManager {
   readonly store: Store.LocalStore;
   readonly cli: SalesforceCli.CliAdapter;
@@ -194,7 +173,12 @@ export class OrgManager {
     const selected = this.store.preference<string | null>("defaultOrgId", null);
     return {
       orgs: this.rows().map((org) =>
-        managedOrg(org, org.id === selected, this.remoteEnabled(org.id)),
+        managedOrg(
+          org,
+          org.id === selected,
+          this.remoteEnabled(org.id),
+          this.store.preference(`org:environment:${org.id}`, undefined),
+        ),
       ),
       defaultOrgId: selected,
     };
@@ -211,10 +195,23 @@ export class OrgManager {
     const session = await verifiedSession(this.cli, username);
     const organization = z
       .object({
-        records: z.array(z.object({ Id: sfId, Name: z.string(), IsSandbox: z.boolean() })).max(1),
+        records: z
+          .array(
+            z.object({
+              Id: sfId,
+              Name: z.string(),
+              IsSandbox: z.boolean(),
+              OrganizationType: z.string().optional(),
+            }),
+          )
+          .max(1),
       })
-      .parse(await this.bootstrap(session, `SELECT Id,Name,IsSandbox FROM Organization LIMIT 1`))
-      .records[0];
+      .parse(
+        await this.bootstrap(
+          session,
+          `SELECT Id,Name,IsSandbox,OrganizationType FROM Organization LIMIT 1`,
+        ),
+      ).records[0];
     const principal = z
       .object({ records: z.array(z.object({ Id: sfId, Username: z.string() })).max(1) })
       .parse(
@@ -254,7 +251,7 @@ export class OrgManager {
           ? 1
           : 0)
       : 1;
-    const id = existing?.id ?? randomBytes(18).toString("base64url");
+    const id = existing?.id ?? NodeCrypto.randomBytes(18).toString("base64url");
     const alias = z
       .string()
       .trim()
@@ -289,31 +286,34 @@ export class OrgManager {
         now(),
       );
     if (!this.store.preference("defaultOrgId", null)) this.store.setPreference("defaultOrgId", id);
+    this.store.setPreference(
+      `org:environment:${id}`,
+      this.cli.discoveredEnvironment(organization.Id, session.username) === "scratch"
+        ? "scratch"
+        : organization.OrganizationType === "Developer Edition"
+          ? "developer"
+          : organization.IsSandbox
+            ? "sandbox"
+            : "production",
+    );
     this.store.activity("org_imported", id);
     return managedOrg(
       this.get(id),
       this.store.preference("defaultOrgId", null) === id,
       this.remoteEnabled(id),
+      this.store.preference(`org:environment:${id}`, undefined),
     );
   }
   private async bootstrap(session: SalesforceCli.CliSession, soql: string) {
-    const response = await fetch(
+    return salesforceJson(
       session.instanceOrigin + "/services/data/v67.0/query?q=" + encodeURIComponent(soql),
-      {
-        redirect: "error",
-        signal: AbortSignal.timeout(20000),
-        headers: { authorization: `Bearer ${session.accessToken}` },
-      },
+      session.accessToken,
+      {},
+      false,
+      100000,
     );
-    if (!response.ok)
-      throw new HttpError(
-        502,
-        "identity_unverified",
-        "Salesforce could not verify this CLI connection. Check authorization and API permissions.",
-      );
-    const text = await boundedBody(response, 100000);
-    return JSON.parse(text) as unknown;
   }
+
   update(
     id: string,
     patch: {
