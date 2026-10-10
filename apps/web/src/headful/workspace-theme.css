@@ -31,6 +31,7 @@
   --geist-primary-foreground: #0a0a0a;
   --geist-link: #52a8ff;
   --geist-editor-selection: #ffffff20;
+  --geist-editor-active: #ffffff08;
   --geist-code-keyword: #d6a4ff;
   --geist-code-number: #8dc5ff;
   --geist-code-string: #7ee7a3;
@@ -54,6 +55,38 @@
   --control-radius: 6px;
   color-scheme: dark;
   font-family: var(--geist-font-sans);
+}
+/* Both modes use the same semantic roles. Appearance follows the shared theme service. */
+html:not(.dark) :is(.sf-app, .os-settings, .sf-admin) {
+  --geist-background: #fff;
+  --geist-surface: #fafafa;
+  --geist-selected: #f0f0f0;
+  --geist-border: #e5e5e5;
+  --geist-border-hover: #999;
+  --geist-foreground: #171717;
+  --geist-muted: #666;
+  --geist-primary: #171717;
+  --geist-primary-hover: #333;
+  --geist-primary-foreground: #fff;
+  --geist-link: #0068d6;
+  --geist-editor-selection: #00000018;
+  --geist-editor-active: #00000005;
+  --geist-code-keyword: #7826b5;
+  --geist-code-number: #0068d6;
+  --geist-code-string: #067647;
+  --geist-code-comment: #666;
+  --geist-success: #067647;
+  --geist-success-background: #eafbf1;
+  --geist-warning: #915900;
+  --geist-warning-background: #fff8e6;
+  --geist-warning-border: #e6c88e;
+  --geist-error: #c52b36;
+  --geist-error-background: #fff0f0;
+  --geist-error-border: #eeb4b8;
+  color-scheme: light;
+}
+html:not(.dark) :is(.sf-brand img, .sf-startup-helmet) {
+  filter: invert(1);
 }
 .sf-app {
   background: var(--geist-background);
@@ -528,10 +561,10 @@
 }
 .sf-app .cm-editor .cm-activeLine,
 .sf-app .cm-editor .cm-activeLineGutter {
-  background: #ffffff08;
+  background: var(--geist-editor-active);
 }
 .sf-app .cm-editor .cm-selectionBackground {
-  background: #ffffff20;
+  background: var(--geist-editor-selection);
 }
 .sf-app .cm-editor .cm-cursor {
   border-left-color: var(--geist-foreground);
@@ -655,4 +688,317 @@
   text-align: left;
   justify-content: flex-start;
   font-weight: 400;
+}
+
+/* Connection setup uses bounded cards and named disclosures in either context. */
+.sf-configuration-page,
+.sf-cli-setup {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.sf-setting-card {
+  border: 1px solid var(--geist-border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--geist-background);
+}
+.sf-setting-card-body {
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+.sf-setting-card h3 {
+  color: var(--geist-foreground);
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0;
+}
+.sf-setting-card footer {
+  border-top: 1px solid var(--geist-border);
+  padding: 10px 18px;
+  background: var(--geist-surface);
+  color: var(--geist-muted);
+  font-size: 12px;
+}
+.sf-install-steps {
+  list-style: none;
+  counter-reset: install;
+  padding: 0;
+  margin: 6px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.sf-install-steps li {
+  counter-increment: install;
+  position: relative;
+  padding-left: 34px;
+}
+.sf-install-steps li::before {
+  content: counter(install);
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 23px;
+  height: 23px;
+  border: 1px solid var(--geist-border);
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  color: var(--geist-muted);
+}
+.sf-install-steps strong,
+.sf-install-steps span {
+  display: block;
+}
+.sf-install-steps strong {
+  color: var(--geist-foreground);
+  font-size: 13px;
+  font-weight: 500;
+}
+.sf-install-steps span {
+  color: var(--geist-muted);
+  font-size: 12px;
+  margin-top: 3px;
+}
+.sf-guide-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  font-size: 12px;
+}
+.sf-guide-links a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--geist-link);
+}
+.sf-app button.sf-guide-action {
+  padding: 6px 0 0;
+  color: var(--geist-link);
+  background: transparent;
+  font-size: 12px;
+}
+.sf-appearance-options {
+  display: inline-flex;
+  padding: 3px;
+  gap: 2px;
+  border: 1px solid var(--geist-border);
+  border-radius: 7px;
+  background: var(--geist-surface);
+}
+.sf-app .sf-appearance-options button,
+.os-settings .sf-appearance-options button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--geist-muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 5px 8px;
+  font-size: 11px;
+}
+.sf-appearance-options button[aria-pressed="true"] {
+  color: var(--geist-foreground);
+  background: var(--geist-background);
+  border-color: var(--geist-border);
+}
+.sf-appearance-options button:hover {
+  color: var(--geist-foreground);
+}
+.sf-appearance-control > p {
+  font-size: 11px;
+  padding: 4px 0;
+}
+.sf-onboarding-preferences {
+  display: flex;
+  justify-content: center;
+  margin-top: 18px;
+}
+.sf-sidebar-footer .sf-appearance-control {
+  padding: 8px;
+  border-block: 1px solid var(--geist-border);
+  margin-block: 4px;
+}
+.sf-cli-setup > .os-disclosure {
+  border-top: 1px solid var(--geist-border);
+}
+.sf-cli-setup .os-disclosure-trigger {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--geist-foreground);
+  justify-content: flex-start;
+  padding: 12px 0;
+  font-size: 12px;
+}
+.sf-cli-setup .os-disclosure-trigger > span {
+  flex: 1;
+  text-align: left;
+}
+.sf-cli-setup .os-disclosure-trigger small {
+  font-size: 11px;
+  color: var(--geist-muted);
+}
+.sf-cli-setup .os-disclosure-trigger[data-panel-open] > svg {
+  transform: rotate(90deg);
+}
+.sf-cli-setup .os-disclosure-body {
+  padding: 0 0 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 12px;
+}
+.sf-cli-setup .os-disclosure-body[hidden] {
+  display: none;
+}
+.sf-cli-setup code {
+  overflow-wrap: anywhere;
+}
+.sf-cli-card {
+  display: grid;
+  margin-bottom: 0;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  align-items: center;
+  padding: 16px;
+}
+.sf-add-heading {
+  grid-column: 1 / -1;
+}
+.sf-add-heading p {
+  margin-top: 4px;
+  font-size: 12px;
+}
+.sf-connections-search {
+  margin: 14px 0;
+  border: 1px solid var(--geist-border);
+  border-radius: 6px;
+  background: var(--geist-surface);
+}
+.sf-app .sf-connections-search input {
+  border: 0;
+  background: transparent;
+}
+.sf-connections-search button {
+  padding: 0;
+  background: transparent;
+  color: var(--geist-muted);
+}
+@media (max-width: 480px) {
+  .sf-cli-setup .os-disclosure-trigger {
+    flex-wrap: wrap;
+  }
+  .sf-cli-setup .os-disclosure-trigger small {
+    width: 100%;
+    padding-left: 22px;
+  }
+  .sf-cli-card {
+    grid-template-columns: 28px minmax(0, 1fr);
+    gap: 10px;
+  }
+  .sf-cli-card > button {
+    grid-column: 2;
+    justify-self: start;
+  }
+}
+.sf-org-picker-heading {
+  padding: 5px 8px 10px;
+  color: var(--geist-foreground);
+  font-size: 12px;
+  font-weight: 500;
+}
+.sf-org-option-mark {
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--geist-border);
+  border-radius: 5px;
+  background: var(--geist-selected);
+  color: var(--geist-foreground);
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+.sf-org-option-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sf-org-option-heading strong {
+  flex: 1;
+}
+.sf-org-option-environment {
+  color: var(--geist-muted);
+  border: 1px solid var(--geist-border);
+  border-radius: 4px;
+  padding: 1px 4px;
+  font-size: 9px;
+  flex-shrink: 0;
+}
+.sf-org-picker-identity .sf-org-attention {
+  color: var(--geist-warning);
+}
+.sf-org-picker-context {
+  border-top: 1px solid var(--geist-border);
+  margin-top: 6px;
+  padding: 8px;
+  font-size: 11px;
+}
+.sf-org-picker-context > summary {
+  cursor: pointer;
+  color: var(--geist-muted);
+}
+.sf-org-picker-context dl {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 10px;
+  margin: 0;
+}
+.sf-org-picker-context dt {
+  color: var(--geist-muted);
+}
+.sf-org-picker-context dd {
+  margin: 1px 0 0;
+  overflow-wrap: anywhere;
+}
+.sf-app button.sf-org-search-clear {
+  background: transparent;
+  color: var(--geist-muted);
+  padding: 0;
+}
+
+.sf-app .sf-org-picker-group button {
+  justify-content: flex-start;
+}
+.sf-org-picker-identity {
+  flex: 1;
+  text-align: left;
+}
+.sf-org-picker .sf-org-option-environment {
+  font-size: 9px;
+}
+.sf-app .sf-org-search input {
+  background: transparent;
+}
+
+.os-settings a.sf-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 11px;
+  border-radius: 6px;
+  background: var(--geist-primary);
+  color: var(--geist-primary-foreground);
+  text-decoration: none;
+}
+.os-settings a.sf-primary:hover {
+  background: var(--geist-primary-hover);
 }

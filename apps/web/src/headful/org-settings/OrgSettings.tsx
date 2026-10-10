@@ -1,5 +1,7 @@
 /* oxlint-disable shadcn/no-unknown-classes -- Org settings owns its scoped Headful surface. */
 import "../workspace-theme.css";
+import { AppearanceSettings } from "../Appearance";
+import { SetupGuide } from "../SetupGuide";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import {
   Activity,
@@ -715,8 +717,8 @@ function Environments({ org, orgs, dispatch }: { org: Org; orgs: Org[]; dispatch
           <Layers size={28} />
           <strong>Choose the parent org</strong>
           <p>
-            Connect the source production org in Connections & CLI to see its sandbox inventory and
-            latest copy status.
+            Connect the source production org in Connections to see its sandbox inventory and latest
+            copy status.
           </p>
         </div>
       )}
@@ -733,6 +735,7 @@ export function OrgSettings({
   onPageChange,
   dispatch,
   connections,
+  cli,
   banner,
   modRecords,
   onStepChange,
@@ -751,12 +754,14 @@ export function OrgSettings({
   onPageChange?: ((page: SettingsPage) => void) | undefined;
   dispatch: SetupDispatch;
   connections: ReactNode;
+  cli?: ReactNode;
   banner?: ReactNode;
   modRecords?: HeadfulModDescriptor[] | undefined;
   onStepChange?: ((step: string) => void) | undefined;
 }) {
   const [localPage, setLocalPage] = useState<SettingsPage>(initialPage);
   const page = activePage ?? localPage;
+  const localScope = ["connections", "cli", "appearance", "documentation", "mods"].includes(page);
   const setPage = (next: SettingsPage) => {
     if (onPageChange) onPageChange(next);
     else setLocalPage(next);
@@ -794,13 +799,13 @@ export function OrgSettings({
         data-experience="org-settings"
         data-experience-step={page}
         aria-busy={pending > 0}
-        data-settings-scope={
-          page === "connections" || page === "mods" ? "this-mac" : "selected-org"
-        }
+        data-settings-scope={localScope ? "this-mac" : "selected-org"}
         aria-label="Org settings"
       >
         {banner}
-        <SettingsDisclosureScope scope={`${org?.id ?? "no-org"}:${page}`}>
+        <SettingsDisclosureScope
+          scope={`${localScope ? "this-mac" : (org?.id ?? "no-org")}:${page}`}
+        >
           {!hideNavigation && (
             <label className="os-mobile-navigation">
               <span>Settings</span>
@@ -862,12 +867,15 @@ export function OrgSettings({
                 )}
               </nav>
             )}
-            <div className="os-main" key={`${org?.id ?? "local"}:${page}:${pageRevision}`}>
+            <div
+              className="os-main"
+              key={`${localScope ? "this-mac" : (org?.id ?? "no-org")}:${page}:${pageRevision}`}
+            >
               <div className="os-page-content">
-                {(page === "connections" || page === "mods") && (
+                {localScope && (
                   <p className="os-scope-label">This Mac · Shared across org workspaces</p>
                 )}
-                {activeOrgId === undefined && page !== "connections" && page !== "mods" && (
+                {activeOrgId === undefined && !localScope && (
                   <div className="os-context">
                     <label>
                       Selected connection
@@ -892,13 +900,19 @@ export function OrgSettings({
                   <HeadfulMods fixtureRecords={modRecords} />
                 ) : page === "connections" ? (
                   connections
+                ) : page === "cli" ? (
+                  (cli ?? <p>Open Salesforce CLI setup from the workspace.</p>)
+                ) : page === "appearance" ? (
+                  <AppearanceSettings />
+                ) : page === "documentation" ? (
+                  <SetupGuide navigate={setPage} />
                 ) : !org ? (
                   <div className="os-empty">
                     <Plug size={30} />
                     <strong>Connect an org to get started</strong>
                     <p>Your org’s identity, capacity and metadata will appear here.</p>
                     <button onClick={() => setPage("connections")}>
-                      Open Connections & CLI <ArrowRight size={16} />
+                      Open Connections <ArrowRight size={16} />
                     </button>
                   </div>
                 ) : (
