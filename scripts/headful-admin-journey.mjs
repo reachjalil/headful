@@ -31,7 +31,10 @@ const sourceDigest = hash.digest("hex");
 const browser = await chromium.launch({ channel: "chrome", headless: true });
 let failure;
 try {
-  const page = await browser.newPage({ viewport: { width: 1100, height: 900 } });
+  const page = await browser.newPage({
+    viewport: { width: 1100, height: 900 },
+    colorScheme: "dark",
+  });
   page.setDefaultTimeout(8000);
   await page.addInitScript(() => {
     window.__adminNativeCalls = 0;
@@ -221,7 +224,7 @@ try {
   );
   await page.getByTestId("org-switcher").click();
   await page.getByRole("textbox", { name: "Find an org or login" }).fill("no-such-org");
-  await page.getByText("No orgs match your search.", { exact: true }).waitFor();
+  await page.getByText("No orgs match “no-such-org”.", { exact: true }).waitFor();
   await page.keyboard.press("Escape");
   NodeAssert.equal(await page.locator(".sf-org-switcher").getAttribute("open"), null);
   NodeAssert.equal(
@@ -347,7 +350,7 @@ try {
   await page.getByRole("heading", { name: "Environment lifecycle", exact: true }).waitFor();
   await page.getByTestId("org-settings-connections").click();
   await page.getByRole("heading", { name: "Org connections", exact: true }).waitFor();
-  pass("composed Environments and Connections & CLI keep org scope and a single settings page");
+  pass("composed Environments and Connections keep org scope and a single settings page");
   await page.getByTestId("org-settings-overview").click();
   await page.getByTestId("org-settings-mods").click();
   NodeAssert.equal(

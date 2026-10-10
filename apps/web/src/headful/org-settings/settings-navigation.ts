@@ -1,4 +1,14 @@
-import { Activity, Boxes, Info, Layers, Plug, Puzzle } from "lucide-react";
+import {
+  Activity,
+  Boxes,
+  Info,
+  Layers,
+  Plug,
+  Puzzle,
+  Terminal,
+  Monitor,
+  BookOpen,
+} from "lucide-react";
 
 export type SettingsPage =
   | "overview"
@@ -6,7 +16,10 @@ export type SettingsPage =
   | "metadata"
   | "environments"
   | "connections"
-  | "mods";
+  | "mods"
+  | "cli"
+  | "appearance"
+  | "documentation";
 export const pageGroups = [
   {
     title: "Selected org",
@@ -37,9 +50,27 @@ export const pageGroups = [
     pages: [
       {
         id: "connections",
-        title: "Connections & CLI",
+        title: "Connections",
         icon: Plug,
-        keywords: "setup login salesforce agent access",
+        keywords: "setup login salesforce agent access orgs authentication",
+      },
+      {
+        id: "cli",
+        title: "Salesforce CLI",
+        icon: Terminal,
+        keywords: "install update upgrade version executable path setup",
+      },
+      {
+        id: "appearance",
+        title: "Appearance",
+        icon: Monitor,
+        keywords: "theme light dark system color mode",
+      },
+      {
+        id: "documentation",
+        title: "Documentation",
+        icon: BookOpen,
+        keywords: "docs guide help getting started authentication",
       },
       {
         id: "mods",

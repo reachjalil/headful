@@ -207,8 +207,52 @@ it("opens a navigable settings page during onboarding and keeps fixture native a
       container
         .querySelector('[aria-label="Settings sections"] [aria-current="page"]')
         ?.textContent?.trim(),
-    ).toBe("Connections & CLI");
+    ).toBe("Connections");
     expect(container.querySelector("dialog")).toBeNull();
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    history.replaceState(null, "");
+  }
+});
+
+it("keeps browser sign-in progress truthful and restores the form after a failed login", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  let failLogin!: (error: Error) => void;
+  const pendingLogin = new Promise<never>((_resolve, reject) => {
+    failLogin = reject;
+  });
+  const fixture = createSetupFixture("empty");
+  const dispatch: SetupDispatch = (operation, input) =>
+    operation === "orgs.login" ? pendingLogin : fixture(operation, input);
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  try {
+    await act(async () =>
+      root.render(<SalesforceSetup dispatch={dispatch} fixture="empty" initialStep="orgs" />),
+    );
+    await settleHeadful(container);
+    await act(async () =>
+      [...container.querySelectorAll<HTMLButtonElement>("button")]
+        .find((b) => b.textContent?.includes("Add org"))!
+        .click(),
+    );
+    await act(async () =>
+      container
+        .querySelector("form")!
+        .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+    );
+    expect(container.querySelector("form [role=status]")?.textContent).toContain(
+      "Finish signing in in your browser",
+    );
+    expect(container.querySelector<HTMLButtonElement>("form .sf-primary")?.disabled).toBe(true);
+    await act(async () => failLogin(new Error("Browser login was cancelled.")));
+    expect(container.querySelector("form [role=status]")).toBeNull();
+    expect(container.querySelector<HTMLButtonElement>("form .sf-primary")?.disabled).toBe(false);
+    expect(container.querySelector("[role=alert]")?.textContent).toContain(
+      "could not complete this step",
+    );
   } finally {
     await act(async () => root.unmount());
     container.remove();

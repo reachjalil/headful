@@ -432,9 +432,15 @@
         color: #ededed;
       }
 
-      html[data-theme-selected="true"] #boot-shell {
-        background: #0a0a0a;
-        color: #ededed;
+      html:not(.dark) #boot-shell {
+        background: #fff;
+        color: #171717;
+      }
+      html:not(.dark) #boot-shell-helmet {
+        filter: invert(1);
+      }
+      html:not(.dark) #boot-shell-card {
+        color: #666;
       }
 
       #boot-shell-card {

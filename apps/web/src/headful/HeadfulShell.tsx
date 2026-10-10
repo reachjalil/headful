@@ -17,6 +17,7 @@ import type { ExperienceState } from "./experience-control";
 import type { ExperiencePreviewProps } from "./experience-views";
 import { SalesforceSetup } from "./SalesforceSetup";
 import "./initial-canvas.css";
+import { useTheme } from "../hooks/useTheme";
 
 interface HeadfulBridge {
   dispatch(operation: string, input: unknown): Promise<unknown>;
@@ -51,6 +52,7 @@ function isolateFromQuery(): Isolate | null {
 
 /** Normal startup composes Salesforce setup, the admin workspace and settings. Development adds isolated experience previews. */
 export function HeadfulShell() {
+  useTheme();
   const [isolate, setIsolate] = useState<Isolate | null>(() =>
     import.meta.env.DEV ? isolateFromQuery() : null,
   );

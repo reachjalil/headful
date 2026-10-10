@@ -9,15 +9,9 @@ import {
   useState,
   useMemo,
 } from "react";
-import { Check, ChevronDown, ExternalLink, Plus, RefreshCw, Menu, Terminal, X } from "lucide-react";
+import { Check, ChevronDown, ExternalLink, Plus, Menu, Search, X } from "lucide-react";
 import type { HeadfulResult } from "@t3tools/contracts/headful";
-import {
-  setupDispatch,
-  salesforceCliInstallUrl,
-  salesforceCliUpgradeUrl,
-  type SetupDispatch,
-  type SetupFixture,
-} from "./setup-service";
+import { setupDispatch, type SetupDispatch, type SetupFixture } from "./setup-service";
 import helmet from "./helmet.svg";
 import "./salesforce-setup.css";
 import { settingsPageTitles, type SettingsPage } from "./org-settings/settings-navigation";
@@ -32,6 +26,8 @@ const AdminWorkspace = lazy(() =>
   import("./admin-workspace/AdminWorkspace").then((m) => ({ default: m.AdminWorkspace })),
 );
 import { OrgSwitcher } from "./OrgSwitcher";
+import { CliSetup } from "./CliSetup";
+import { AppearanceControl } from "./Appearance";
 
 type ManagedOrg = HeadfulResult<"orgs.list">["orgs"][number];
 type Discovery = HeadfulResult<"orgs.discover">["connections"][number];
@@ -71,6 +67,13 @@ export function OrgConnections({
   );
   const [domain, setDomain] = useState("");
   const [adding, setAdding] = useState(false);
+  const [loggingIn, setLoggingIn] = useState(false);
+  const [search, setSearch] = useState("");
+  const visibleRows = rows.filter((row) =>
+    `${row.label} ${row.username} ${row.environment} ${row.managed?.salesforceOrgId ?? row.discovered?.orgId ?? ""}`
+      .toLowerCase()
+      .includes(search.trim().toLowerCase()),
+  );
   const [sandboxes, setSandboxes] = useState<HeadfulResult<"orgs.sandboxes"> | null>(null);
   const { dispatch } = useSetupContext();
   const login = async (
@@ -78,14 +81,19 @@ export function OrgConnections({
     instanceOrigin?: string,
     alias?: string,
   ) => {
-    await dispatch("orgs.login", {
-      environment,
-      ...(instanceOrigin ? { instanceOrigin } : {}),
-      ...(alias ? { alias } : {}),
-    });
-    await refresh();
-    setAdding(false);
-    setSandboxes(null);
+    setLoggingIn(true);
+    try {
+      await dispatch("orgs.login", {
+        environment,
+        ...(instanceOrigin ? { instanceOrigin } : {}),
+        ...(alias ? { alias } : {}),
+      });
+      await refresh();
+      setAdding(false);
+      setSandboxes(null);
+    } finally {
+      setLoggingIn(false);
+    }
   };
   return (
     <section className="sf-connections" aria-label="Salesforce org connections">
@@ -112,6 +120,10 @@ export function OrgConnections({
             );
           }}
         >
+          <div className="sf-add-heading">
+            <h3>Connect an org</h3>
+            <p>Choose where you sign in. Your browser handles authentication.</p>
+          </div>
           <label>
             Login destination
             <select
@@ -139,7 +151,11 @@ export function OrgConnections({
               />
             </label>
           )}
-          <p>Sign in in your browser. Salesforce CLI keeps the credentials on this Mac.</p>
+          <p role={loggingIn ? "status" : undefined}>
+            {loggingIn
+              ? "Finish signing in in your browser, then return here. This page updates when sign-in completes."
+              : "Sign in in your browser. Salesforce CLI keeps the credentials on this Mac."}
+          </p>
           <button
             type="button"
             className="sf-secondary"
@@ -149,9 +165,35 @@ export function OrgConnections({
             Cancel
           </button>
           <button className="sf-primary" disabled={busy}>
-            Continue to Salesforce <ExternalLink size={14} />
+            {loggingIn ? "Waiting for browser sign-in…" : "Continue to Salesforce"}{" "}
+            <ExternalLink size={14} />
           </button>
         </form>
+      )}
+      {rows.length > 0 && (
+        <label className="sf-org-search sf-connections-search">
+          <Search size={14} aria-hidden="true" />
+          <input
+            aria-label="Find a connection"
+            placeholder="Find a connection…"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+          />
+          {search && (
+            <button
+              type="button"
+              aria-label="Clear connection search"
+              onClick={() => setSearch("")}
+            >
+              <X size={13} />
+            </button>
+          )}
+        </label>
+      )}
+      {rows.length > 0 && !visibleRows.length && (
+        <p className="sf-empty" role="status">
+          No connections match “{search.trim()}”.
+        </p>
       )}
       {!rows.length && (
         <div className="sf-empty">
@@ -163,7 +205,7 @@ export function OrgConnections({
         </div>
       )}
       {["production", "development", "scratch", "unknown"].map((environment) => {
-        const group = rows.filter((row) =>
+        const group = visibleRows.filter((row) =>
           environment === "development"
             ? ["sandbox", "developer"].includes(row.environment)
             : row.environment === environment,
@@ -611,93 +653,19 @@ export function SalesforceSetup({
     enabled.find((org) => org.isDefault) ??
     enabled[0];
   const cliPanel = (
-    <section className="sf-cli-card" aria-label="Salesforce CLI status">
-      <div className={`sf-cli-icon ${ready(cli) ? "sf-cli-ready" : ""}`}>
-        {ready(cli) ? <Check size={20} /> : <Terminal size={20} />}
-      </div>
-      <div>
-        <h2>
-          {!cli
-            ? "Checking Salesforce CLI…"
-            : ready(cli)
-              ? "Salesforce CLI is ready"
-              : cli.state === "unsupported" || cli.legacyDetected
-                ? "Upgrade Salesforce CLI"
-                : "Install Salesforce CLI"}
-        </h2>
-        <p>
-          {!cli
-            ? "Looking for the CLI on this Mac."
-            : ready(cli)
-              ? cli.installations.find((installation) => installation.path === cli.selected)
-                  ?.version
-              : `Headful requires Salesforce CLI ${cli.minimumVersion} or newer. The old sfdx CLI is no longer supported.`}
-        </p>
-        {cli?.selected && (
-          <>
-            <code>{cli.selected}</code>
-            <p className="sf-footnote">Minimum supported version: {cli.minimumVersion}</p>
-          </>
-        )}
-        {cli?.state === "multiple" && (
-          <label className="sf-cli-select">
-            CLI installation
-            <select
-              value={cli.selected ?? ""}
-              disabled={busy}
-              onChange={(event) => {
-                const path = event.target.value;
-                void run(async () => {
-                  await dispatch("cli.configure", { path });
-                  await refresh();
-                });
-              }}
-            >
-              {cli.installations
-                .filter((installation) => installation.supported)
-                .map((installation) => (
-                  <option key={installation.path} value={installation.path}>
-                    {installation.path}
-                  </option>
-                ))}
-            </select>
-          </label>
-        )}
-        {cli && !ready(cli) && (
-          <>
-            <a
-              className="sf-primary"
-              href={
-                cli.state === "unsupported" || cli.legacyDetected
-                  ? salesforceCliUpgradeUrl
-                  : salesforceCliInstallUrl
-              }
-              target="_blank"
-              rel="noreferrer"
-            >
-              {cli.state === "unsupported" || cli.legacyDetected
-                ? "Upgrade at Salesforce"
-                : "Install from Salesforce"}{" "}
-              <ExternalLink size={14} />
-            </a>
-            <p className="sf-footnote">
-              Follow Salesforce’s instructions, then return here. We check again when Headful
-              regains focus.
-            </p>
-          </>
-        )}
-      </div>
-      <button
-        className="sf-icon-button"
-        aria-label="Recheck Salesforce CLI"
-        disabled={busy}
-        onClick={() => {
-          void run(refresh);
-        }}
-      >
-        <RefreshCw size={16} className={busy ? "sf-spin" : ""} />
-      </button>
-    </section>
+    <CliSetup
+      cli={cli}
+      busy={busy}
+      recheck={() => {
+        void run(refresh);
+      }}
+      configure={(path) => {
+        void run(async () => {
+          await dispatch("cli.configure", { path });
+          await refresh();
+        });
+      }}
+    />
   );
   const connections = <OrgConnections rows={rows} busy={busy} run={run} refresh={refresh} />;
   const context = useMemo(() => ({ dispatch }), [dispatch]);
@@ -705,7 +673,7 @@ export function SalesforceSetup({
     <SetupContext.Provider value={context}>
       <main
         ref={appRoot}
-        className={`sf-app sf-geist dark ${step === "workspace" ? "sf-app-workspace" : ""}`}
+        className={`sf-app sf-geist ${step === "workspace" ? "sf-app-workspace" : ""}`}
         data-native={window.desktopBridge ? "true" : undefined}
         data-headful-setup=""
         data-experience="salesforce-setup"
@@ -817,6 +785,9 @@ export function SalesforceSetup({
                     >
                       Setup
                     </button>
+                    <button onClick={() => openSetup("cli")}>Salesforce CLI</button>
+                    <button onClick={() => openSetup("documentation")}>Documentation</button>
+                    <AppearanceControl idPrefix="appearance-menu" />
                     <button
                       disabled={busy}
                       onClick={() => {
@@ -979,6 +950,9 @@ export function SalesforceSetup({
                       {error}
                     </p>
                   )}
+                  <div className="sf-onboarding-preferences">
+                    <AppearanceControl idPrefix="appearance-setup" />
+                  </div>
                   {step !== "welcome" && (
                     <footer className="sf-wizard-footer">
                       <button
@@ -1117,11 +1091,18 @@ export function SalesforceSetup({
                     dispatch={dispatch}
                     modRecords={fixture ? [] : undefined}
                     connections={
-                      <>
-                        {cliPanel}
-                        {ready(cli) && connections}
-                      </>
+                      ready(cli) ? (
+                        connections
+                      ) : (
+                        <>
+                          <p className="sf-access-note">
+                            Set up Salesforce CLI before managing org connections.
+                          </p>
+                          {cliPanel}
+                        </>
+                      )
                     }
+                    cli={cliPanel}
                   />
                 </LazySurface>
                 {error && (

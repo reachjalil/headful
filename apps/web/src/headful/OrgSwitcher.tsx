@@ -1,6 +1,6 @@
 /* oxlint-disable shadcn/no-unknown-classes -- Focused Headful surface uses its scoped stylesheet. */
 import { useEffect, useRef, useState } from "react";
-import { Check, ChevronDown, ExternalLink, Plus, Search } from "lucide-react";
+import { Check, ChevronsUpDown, ExternalLink, Plus, Search, X } from "lucide-react";
 
 export interface OrgSwitchOption {
   id: string;
@@ -29,6 +29,7 @@ export function OrgSwitcher({
   openDisabled?: boolean | undefined;
 }) {
   const menu = useRef<HTMLDetailsElement>(null);
+  const searchInput = useRef<HTMLInputElement>(null);
   const [search, setSearch] = useState("");
   const selected = orgs.find((org) => org.id === selectedId);
   const visible = orgs.filter((org) =>
@@ -43,6 +44,24 @@ export function OrgSwitcher({
     }
     setSearch("");
   };
+  const focusOption = (direction: number, edge?: "first" | "last") => {
+    const options = [
+      ...(menu.current?.querySelectorAll<HTMLButtonElement>(".sf-org-picker-list button") ?? []),
+    ];
+    if (!options.length) return;
+    const current = options.indexOf(document.activeElement as HTMLButtonElement);
+    const next =
+      edge === "first"
+        ? 0
+        : edge === "last"
+          ? options.length - 1
+          : current < 0
+            ? direction > 0
+              ? 0
+              : options.length - 1
+            : (current + direction + options.length) % options.length;
+    options[next]?.focus();
+  };
   useEffect(() => {
     const outside = (event: PointerEvent) => {
       if (menu.current?.open && !menu.current.contains(event.target as Node))
@@ -55,13 +74,38 @@ export function OrgSwitcher({
     <details
       ref={menu}
       className="sf-org-switcher"
+      onBlur={(event) => {
+        if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget as Node)) {
+          event.currentTarget.open = false;
+          setSearch("");
+        }
+      }}
       onToggle={(event) => {
+        if (event.target !== event.currentTarget) return;
         if (!event.currentTarget.open) setSearch("");
+        else searchInput.current?.focus();
       }}
       onKeyDown={(event) => {
         if (event.key === "Escape" && menu.current?.open) {
           event.preventDefault();
           close();
+        }
+        if (
+          menu.current?.open &&
+          ["ArrowDown", "ArrowUp"].includes(event.key) &&
+          (event.target === searchInput.current ||
+            (event.target as HTMLElement).closest(".sf-org-picker-list"))
+        ) {
+          event.preventDefault();
+          focusOption(event.key === "ArrowDown" ? 1 : -1);
+        }
+        if (
+          menu.current?.open &&
+          ["Home", "End"].includes(event.key) &&
+          (event.target as HTMLElement).closest(".sf-org-picker-list")
+        ) {
+          event.preventDefault();
+          focusOption(0, event.key === "Home" ? "first" : "last");
         }
       }}
     >
@@ -74,17 +118,32 @@ export function OrgSwitcher({
           <span>{selected?.username ?? "Manage your connections"}</span>
         </div>
         {selected && <span className="sf-org-environment">{selected.environment}</span>}
-        <ChevronDown size={14} aria-hidden="true" />
+        <ChevronsUpDown size={14} aria-hidden="true" />
       </summary>
       <section className="sf-org-picker" aria-label="Salesforce orgs">
+        <div className="sf-org-picker-heading">Switch org</div>
         <label className="sf-org-search">
           <Search size={14} aria-hidden="true" />
           <input
+            ref={searchInput}
             aria-label="Find an org or login"
             placeholder="Find an org or login…"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
           />
+          {search && (
+            <button
+              type="button"
+              className="sf-org-search-clear"
+              aria-label="Clear org search"
+              onClick={() => {
+                setSearch("");
+                searchInput.current?.focus();
+              }}
+            >
+              <X size={13} />
+            </button>
+          )}
         </label>
         <div className="sf-org-picker-list">
           {[true, false].map((available) => {
@@ -106,13 +165,18 @@ export function OrgSwitcher({
                           else onManage();
                         }}
                       >
+                        <span className="sf-org-option-mark" aria-hidden="true">
+                          {org.label.slice(0, 1).toUpperCase()}
+                        </span>
                         <div className="sf-org-picker-identity">
-                          <strong>{org.label}</strong>
+                          <div className="sf-org-option-heading">
+                            <strong>{org.label}</strong>
+                            <span className="sf-org-option-environment">{org.environment}</span>
+                          </div>
                           <span>{org.username}</span>
-                          <small>
-                            {org.environment} · {org.salesforceOrgId}
-                            {!org.available && ` · ${org.reason}`}
-                          </small>
+                          {!org.available && (
+                            <small className="sf-org-attention">{org.reason}</small>
+                          )}
                         </div>
                         {selectedId === org.id ? (
                           <Check size={15} aria-label="Selected org" />
@@ -128,10 +192,31 @@ export function OrgSwitcher({
           })}
           {!visible.length && (
             <p className="sf-org-picker-empty" role="status">
-              {orgs.length ? "No orgs match your search." : "No connected orgs yet."}
+              {orgs.length ? `No orgs match “${search.trim()}”.` : "No connected orgs yet."}
             </p>
           )}
         </div>
+        {selected && (
+          <details className="sf-org-picker-context">
+            <summary>Connection details</summary>
+            <dl>
+              <div>
+                <dt>Signed in as</dt>
+                <dd>{selected.username}</dd>
+              </div>
+              <div>
+                <dt>Org ID</dt>
+                <dd>
+                  <code>{selected.salesforceOrgId}</code>
+                </dd>
+              </div>
+              <div>
+                <dt>Environment</dt>
+                <dd>{selected.environment}</dd>
+              </div>
+            </dl>
+          </details>
+        )}
         <div className="sf-org-picker-actions">
           {selected && onOpen && (
             <button
